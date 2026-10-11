@@ -20,3 +20,10 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+  # starlette.testclient prefers httpx2 and falls back to httpx with this notice.
+  # The plan pins the dev dependency to httpx, so silence only this one message
+  # (other Starlette deprecations stay visible). Drop this filter once the dev
+  # group moves to httpx2; the httpx fallback is slated for removal upstream.
+  "ignore:Using .httpx. with .starlette.testclient. is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
