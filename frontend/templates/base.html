@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{% block title %}{% endblock %} — zerde/deploy</title>
+<link rel="icon" href="/static/favicon.svg?v={{ asset_v }}" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/fonts.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/css/app.css?v={{ asset_v }}">
+</head>
+<body>
+<a class="skip" href="#main">{{ t("nav.skip") }}</a>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="mark" href="/">zerde<span>/</span>deploy</a>
+    {% if user %}
+    <nav class="top-nav" aria-label="{{ t('nav.main') }}">
+      <a href="/"{% if path == "/" or path.startswith("/sites/") %} aria-current="page"{% endif %}>{{ t("nav.sites") }}</a>
+      {% if is_admin %}<a href="/admin"{% if path.startswith("/admin") %} aria-current="page"{% endif %}>{{ t("nav.admin") }}</a>{% endif %}
+    </nav>
+    {% endif %}
+    <div class="top-end">
+      <nav class="langs" aria-label="{{ t('lang.label') }}">
+        {%- for code in langs %}<a href="?lang={{ code }}" hreflang="{{ code }}" lang="{{ code }}"{% if code == lang %} aria-current="true"{% endif %}>{{ lang_labels[code] }}</a>{% endfor -%}
+      </nav>
+      {% if user %}
+      <details class="menu">
+        <summary aria-label="{{ t('nav.account') }}"><span class="avatar" aria-hidden="true">{{ user.email[:1]|upper }}</span></summary>
+        <div class="menu-pop">
+          <p class="menu-email">{{ user.email }}</p>
+          <nav class="menu-links" aria-label="{{ t('nav.main') }}">
+            <a href="/">{{ t("nav.sites") }}</a>
+            {% if is_admin %}<a href="/admin">{{ t("nav.admin") }}</a>{% endif %}
+          </nav>
+          <form method="post" action="/auth/logout"><button class="btn btn-secondary btn-block" type="submit">{{ t("nav.sign_out") }}</button></form>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+</header>
+<main id="main" class="wrap">
+{% if flash %}<p class="notice {{ 'notice-error' if flash.kind == 'error' else 'notice-ok' }}" role="{{ 'alert' if flash.kind == 'error' else 'status' }}">{{ flash.text }}</p>{% endif %}
+{% block main %}{% endblock %}
+</main>
+<script type="application/json" id="zd-strings">{{ js_strings|tojson }}</script>
+{% block scripts %}<script src="/static/js/app.js?v={{ asset_v }}" defer></script>{% endblock %}
+</body>
+</html>

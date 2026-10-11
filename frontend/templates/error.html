@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ message }}{% endblock %}
+{% block main %}
+<section class="auth">
+  <p class="eyebrow mono">{{ code }}</p>
+  <h1>{{ message }}</h1>
+  <p class="lead"><a href="/">{{ t("error.back_home") }}</a></p>
+</section>
+{% endblock %}
