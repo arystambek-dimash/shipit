@@ -32,6 +32,11 @@ def can_deploy(conn: sqlite3.Connection, settings: Settings, email: str) -> bool
     email = email.strip().lower()
     if is_admin(settings, email):
         return True
+    # Single authorisation gate: anything that is not a well-formed email is
+    # refused before a domain is derived (no "@" would make rsplit return the
+    # whole string and match a "@domain" entry).
+    if normalize_email(email) is None:
+        return False
     domain = "@" + email.rsplit("@", 1)[-1]
     row = conn.execute(
         "SELECT 1 FROM allowlist WHERE pattern IN (?, ?) LIMIT 1", (email, domain)

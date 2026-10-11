@@ -60,3 +60,12 @@ def test_duplicates_and_removal(conn):
     assert access.remove_from_allowlist(conn, entries[0]["id"])
     assert not access.remove_from_allowlist(conn, entries[0]["id"])
     assert access.list_allowlist(conn) == []
+
+
+def test_can_deploy_rejects_non_email_input_even_with_domain_entry(conn):
+    # Without "@" the domain derivation used to return the whole string, so
+    # "example.com" and "@example.com" both mapped to the "@example.com" entry.
+    assert access.add_to_allowlist(conn, "@example.com", "boss@zerde.ai")
+    assert not access.can_deploy(conn, SETTINGS, "example.com")
+    assert not access.can_deploy(conn, SETTINGS, "@example.com")
+    assert access.can_deploy(conn, SETTINGS, "bob@example.com")
