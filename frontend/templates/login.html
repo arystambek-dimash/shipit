@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ t("login.title") }}{% endblock %}
+{% block main %}
+<section class="auth">
+  <h1>{{ t("login.title") }}</h1>
+  <p class="lead">{{ t("login.lead", domain=settings.sites_domain) }}</p>
+  {% if error %}<p class="notice notice-error" role="alert">{{ error }}</p>{% endif %}
+  {% if settings.google_client_id %}
+  <div id="g-btn" class="g-slot" data-client-id="{{ settings.google_client_id }}" data-next="{{ next }}" data-locale="{{ lang }}"></div>
+  <p class="notice notice-error g-error" role="alert" hidden>{{ t("error.google_failed") }}</p>
+  <p class="or">{{ t("login.or") }}</p>
+  {% endif %}
+  <form class="stack" method="post" action="/auth/email/start">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="email">{{ t("login.email_label") }}</label>
+      <input class="input" id="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" required value="{{ email }}" aria-describedby="email-hint">
+      <p class="hint" id="email-hint">{{ t("login.email_hint") }}</p>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t("login.email_submit") }}</button>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+{% if settings.google_client_id %}<script src="https://accounts.google.com/gsi/client" async></script>{% endif %}
+{{ super() }}
+{% endblock %}

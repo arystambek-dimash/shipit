@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ t("code.title") }}{% endblock %}
+{% block main %}
+<section class="auth">
+  <h1>{{ t("code.title") }}</h1>
+  <p class="lead">{{ t("code.lead", email=email) }}</p>
+  {% if error %}<p class="notice notice-error" role="alert">{{ error }}</p>{% endif %}
+  <form class="stack" method="post" action="/auth/email/verify">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="code">{{ t("code.label") }}</label>
+      <input class="input code-input" id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t("code.submit") }}</button>
+  </form>
+  <div class="auth-foot">
+    <form method="post" action="/auth/email/resend">
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn-link" type="submit" data-wait="{{ resend_wait }}" data-label="{{ t('code.resend') }}" data-wait-label="{{ t('code.resend_in', s='{s}') }}"{% if resend_wait %} disabled{% endif %}>{{ t("code.resend_in", s=resend_wait) if resend_wait else t("code.resend") }}</button>
+    </form>
+    <a href="/login?next={{ next|urlencode }}">{{ t("code.change_email") }}</a>
+  </div>
+</section>
+{% endblock %}
