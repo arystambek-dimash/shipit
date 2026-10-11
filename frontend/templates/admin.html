@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ t("admin.title") }}{% endblock %}
+{% block main %}
+<div class="page-head">
+  <h1>{{ t("admin.title") }}</h1>
+  <p class="muted">{{ t("admin.lead") }}</p>
+</div>
+
+<form class="field" method="post" action="/admin/allowlist">
+  <label for="pattern">{{ t("admin.pattern_label") }}</label>
+  <div class="row-form">
+    <input class="input" id="pattern" name="pattern" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    <button class="btn btn-primary" type="submit">{{ t("admin.add") }}</button>
+  </div>
+</form>
+
+<ul class="list" role="list">
+  {% for entry in entries %}
+  <li class="entry">
+    <span class="mono">{{ entry.pattern }}</span>
+    <form method="post" action="/admin/allowlist/{{ entry.id }}/delete"><button class="btn btn-quiet" type="submit">{{ t("admin.remove") }}</button></form>
+  </li>
+  {% else %}
+  <li class="empty">{{ t("admin.empty") }}</li>
+  {% endfor %}
+</ul>
+
+<section class="panel" aria-labelledby="admins-title">
+  <h2 id="admins-title">{{ t("admin.admins") }}</h2>
+  <p class="hint">{{ t("admin.admins_hint") }}</p>
+  <ul class="list" role="list">
+    {% for email in admins %}<li class="entry"><span class="mono">{{ email }}</span></li>{% endfor %}
+  </ul>
+</section>
+
+<section class="panel" aria-labelledby="all-sites-title">
+  <h2 id="all-sites-title">{{ t("admin.all_sites") }}</h2>
+  <ul class="list" role="list">
+    {% for site in sites %}
+    <li class="site-row">
+      <div class="site-main">
+        <a class="site-link" href="/sites/{{ site.name }}">{{ site.name }}</a>
+        <span class="site-meta">{{ t("admin.owner") }}: {{ site.owner_email }} · {{ ago(site.deployed_at or site.updated_at) }} · {{ size(site.total_bytes or 0) }}</span>
+      </div>
+    </li>
+    {% else %}
+    <li class="empty">{{ t("sites.empty") }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}
