@@ -121,3 +121,69 @@ async def deploy_version(
 ) -> Response:
     site = await run_in_threadpool(managed_site, request, conn, user, name)
     return await handle_upload(request, conn, user, site)
+
+
+@router.get("/sites/{name}")
+def site_page(
+    name: str,
+    request: Request,
+    user: sqlite3.Row = Depends(require_deployer),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> Response:
+    site = managed_site(request, conn, user, name)
+    return render(
+        request, "site.html", user=user, site=site,
+        deploys=service.list_deploys(conn, site["id"]), url=settings_of(request).site_url(site["name"]),
+    )
+
+
+@router.post("/sites/{name}/restore")
+def restore_version(
+    name: str,
+    request: Request,
+    deploy_id: int = Form(...),
+    user: sqlite3.Row = Depends(require_deployer),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> Response:
+    site = managed_site(request, conn, user, name)
+    try:
+        service.restore(conn, request.app.state.store, site, deploy_id)
+    except service.SiteError:
+        raise NotFound() from None
+    message = i18n.t(request.state.lang, "flash.restored")
+    return redirect(f"/sites/{name}", settings=settings_of(request), flash=("ok", message))
+
+
+@router.post("/sites/{name}/rename")
+def rename_site(
+    name: str,
+    request: Request,
+    new_name: str = Form(""),
+    user: sqlite3.Row = Depends(require_deployer),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> Response:
+    site = managed_site(request, conn, user, name)
+    settings = settings_of(request)
+    lang = request.state.lang
+    try:
+        renamed = service.rename(conn, request.app.state.store, site, new_name)
+    except service.SiteError as error:
+        return redirect(f"/sites/{name}", settings=settings, flash=("error", i18n.t(lang, f"error.{error.code}")))
+    return redirect(f"/sites/{renamed}", settings=settings, flash=("ok", i18n.t(lang, "flash.renamed")))
+
+
+@router.post("/sites/{name}/delete")
+def delete_site(
+    name: str,
+    request: Request,
+    confirm: str = Form(""),
+    user: sqlite3.Row = Depends(require_deployer),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> Response:
+    site = managed_site(request, conn, user, name)
+    settings = settings_of(request)
+    lang = request.state.lang
+    if confirm.strip().lower() != site["name"]:
+        return redirect(f"/sites/{name}", settings=settings, flash=("error", i18n.t(lang, "error.confirm_mismatch")))
+    service.delete(conn, request.app.state.store, site)
+    return redirect("/", settings=settings, flash=("ok", i18n.t(lang, "flash.deleted")))

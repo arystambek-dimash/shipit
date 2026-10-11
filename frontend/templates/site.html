@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_drop.html" import drop_zone with context %}
+{% from "_icons.html" import copy_icon %}
+{% block title %}{{ site.name }}{% endblock %}
+{% block main %}
+<p class="crumb"><a href="/">← {{ t("site.back") }}</a></p>
+<div class="page-head">
+  <h1 class="mono">{{ site.name }}</h1>
+  <div class="link-line">
+    <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
+    <button class="btn btn-quiet" type="button" data-copy="{{ url }}">{{ copy_icon() }}<span>{{ t("sites.copy") }}</span></button>
+  </div>
+</div>
+
+{{ drop_zone("/sites/" ~ site.name ~ "/deploy", t("drop.redeploy_title")) }}
+
+<section class="panel" aria-labelledby="versions-title">
+  <h2 id="versions-title">{{ t("site.history") }}</h2>
+  <ol class="list" role="list">
+    {% for d in deploys %}
+    <li class="version">
+      <span class="version-id">#{{ d.id }}</span>
+      <div class="version-main">
+        <span>{{ ago(d.created_at) }}</span>
+        <span class="version-meta">{{ t("site.files", n=d.file_count) }} · {{ size(d.total_bytes) }} · {{ d.author_email }}</span>
+      </div>
+      {% if d.id == site.current_deploy_id %}
+      <span class="tag">{{ t("site.current") }}</span>
+      {% else %}
+      <form method="post" action="/sites/{{ site.name }}/restore">
+        <input type="hidden" name="deploy_id" value="{{ d.id }}">
+        <button class="btn btn-secondary" type="submit">{{ t("site.restore") }}</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="panel" aria-labelledby="rename-title">
+  <h2 id="rename-title">{{ t("site.rename_title") }}</h2>
+  <form class="row-form" method="post" action="/sites/{{ site.name }}/rename">
+    <div class="affix">
+      <input class="input mono" id="new-name" name="new_name" value="{{ site.name }}" aria-labelledby="rename-title" aria-describedby="rename-hint" maxlength="40" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+      <span class="suffix mono">.{{ settings.sites_domain }}</span>
+    </div>
+    <button class="btn btn-secondary" type="submit">{{ t("site.rename_submit") }}</button>
+  </form>
+  <p class="hint" id="rename-hint">{{ t("site.rename_hint") }}</p>
+</section>
+
+<section class="panel panel-danger" aria-labelledby="delete-title">
+  <h2 id="delete-title">{{ t("site.delete_title") }}</h2>
+  <p class="hint" id="delete-hint">{{ t("site.delete_hint", name=site.name) }}</p>
+  <form class="row-form" method="post" action="/sites/{{ site.name }}/delete">
+    <label class="visually-hidden" for="confirm">{{ t("site.delete_label") }}</label>
+    <input class="input mono" id="confirm" name="confirm" data-confirm="{{ site.name }}" aria-describedby="delete-hint" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    <button class="btn btn-danger" type="submit">{{ t("site.delete_submit") }}</button>
+  </form>
+</section>
+{% endblock %}
