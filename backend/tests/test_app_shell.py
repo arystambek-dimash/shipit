@@ -1,3 +1,4 @@
+from app.devsites import resolve_site_file
 from tests.helpers import publish_site
 
 
@@ -51,7 +52,7 @@ def test_tls_ask(client, app, conn):
     assert client.get("/internal/tls-ask?domain=localhost").status_code == 404
 
 
-def test_dev_site_serving(client, app, conn):
+def test_dev_site_serving(client, app, conn, settings):
     name = publish_site(
         app, conn, {"index.html": b"home", "about.html": b"about", "docs/index.html": b"docs", "404.html": b"custom"}
     )
@@ -62,7 +63,46 @@ def test_dev_site_serving(client, app, conn):
     assert client.get(base + "/docs").text == "docs"
     missing = client.get(base + "/missing")
     assert missing.status_code == 404 and missing.text == "custom"
-    escape = client.get(base + "/%2e%2e/%2e%2e/app.db")
-    assert escape.status_code == 404
+    # The site root is data/sites/<name>/deploys/<id>. A sentinel two levels up (sites/<name>/secret.txt) and the
+    # real data/app.db four levels up are both reachable if, and only if, the containment guard fails.
+    sentinel = settings.sites_dir / name / "secret.txt"
+    sentinel.write_text("top secret")
+    for escape_path in ("/%2e%2e/%2e%2e/secret.txt", "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/app.db"):
+        escape = client.get(base + escape_path)
+        assert escape.status_code == 404, escape_path
+        assert "top secret" not in escape.text and b"SQLite format" not in escape.content, escape_path
     unknown = client.get("http://missing-site.localhost:8000/")
     assert unknown.status_code == 404 and "404" in unknown.text
+
+
+def test_resolve_site_file_stays_inside_the_site(tmp_path):
+    root = tmp_path / "site"
+    (root / "docs").mkdir(parents=True)
+    (root / "index.html").write_text("home")
+    (root / "about.html").write_text("about")
+    (root / "docs" / "index.html").write_text("docs")
+    (tmp_path / "secret.txt").write_text("outside")
+    (tmp_path / "site-evil").mkdir()  # shares the root's string prefix, so a startswith() check would let it in
+    (tmp_path / "site-evil" / "index.html").write_text("evil")
+    (root / "link.txt").symlink_to(tmp_path / "secret.txt")
+    (root / "linkdir").symlink_to(tmp_path / "site-evil", target_is_directory=True)
+
+    assert resolve_site_file(root, "/") == root.resolve() / "index.html"
+    assert resolve_site_file(root, "/about") == root.resolve() / "about.html"
+    assert resolve_site_file(root, "/docs") == root.resolve() / "docs" / "index.html"
+    assert resolve_site_file(root, "/docs/") == root.resolve() / "docs" / "index.html"
+    assert resolve_site_file(root, "/missing") is None
+
+    for url_path in (
+        "/../secret.txt",
+        "/%2e%2e/secret.txt",
+        "/docs/../../secret.txt",
+        "/docs/%2e%2e/%2e%2e/secret.txt",
+        "/../site-evil/index.html",
+        "/..",
+        "/%2e%2e/",
+        "/link.txt",  # a symlink that resolves outside the root
+        "/linkdir",
+        "/linkdir/",
+    ):
+        assert resolve_site_file(root, url_path) is None, url_path
