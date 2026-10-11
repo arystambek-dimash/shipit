@@ -1,0 +1,91 @@
+"""Six-digit email confirmation codes with expiry, attempt limits and rate limits."""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import secrets
+import sqlite3
+
+from .. import db
+
+CODE_TTL = 600
+MAX_ATTEMPTS = 5
+EMAIL_INTERVAL = 60
+EMAIL_PER_HOUR = 5
+IP_PER_HOUR = 20
+HOUR = 3600
+DIGITS = "0123456789"
+
+
+class RateLimited(Exception):
+    def __init__(self, scope: str, retry_after: int) -> None:
+        super().__init__(f"{scope}: retry after {retry_after}s")
+        self.scope = scope
+        self.retry_after = max(1, retry_after)
+
+
+def _digest(secret: str, email: str, code: str) -> str:
+    return hmac.new(secret.encode(), f"{email}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def seconds_until_resend(conn: sqlite3.Connection, email: str, now: int | None = None) -> int:
+    ts = db.now() if now is None else now
+    last = conn.execute(
+        "SELECT MAX(created_at) AS last FROM login_codes WHERE email = ?", (email,)
+    ).fetchone()["last"]
+    return 0 if last is None else max(0, EMAIL_INTERVAL - (ts - last))
+
+
+def issue_code(conn: sqlite3.Connection, secret: str, email: str, ip: str, now: int | None = None) -> str:
+    ts = db.now() if now is None else now
+    wait = seconds_until_resend(conn, email, ts)
+    if wait:
+        raise RateLimited("email_interval", wait)
+    since = ts - HOUR
+    recent = conn.execute(
+        "SELECT created_at FROM login_codes WHERE email = ? AND created_at > ? ORDER BY created_at",
+        (email, since),
+    ).fetchall()
+    if len(recent) >= EMAIL_PER_HOUR:
+        raise RateLimited("email_hour", recent[0]["created_at"] + HOUR - ts)
+    recent = conn.execute(
+        "SELECT created_at FROM login_codes WHERE ip = ? AND created_at > ? ORDER BY created_at",
+        (ip, since),
+    ).fetchall()
+    if len(recent) >= IP_PER_HOUR:
+        raise RateLimited("ip", recent[0]["created_at"] + HOUR - ts)
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    with db.transaction(conn):
+        conn.execute("DELETE FROM login_codes WHERE created_at < ?", (ts - 86400,))
+        conn.execute(
+            "UPDATE login_codes SET consumed_at = ? WHERE email = ? AND consumed_at IS NULL", (ts, email)
+        )
+        conn.execute(
+            "INSERT INTO login_codes (email, code_hash, ip, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+            (email, _digest(secret, email, code), ip, ts, ts + CODE_TTL),
+        )
+    return code
+
+
+def verify_code(conn: sqlite3.Connection, secret: str, email: str, code: str, now: int | None = None) -> bool:
+    ts = db.now() if now is None else now
+    digits = "".join(ch for ch in code if ch in DIGITS)
+    with db.transaction(conn):
+        row = conn.execute(
+            "SELECT id, code_hash, attempts FROM login_codes"
+            " WHERE email = ? AND consumed_at IS NULL AND expires_at > ?"
+            " ORDER BY created_at DESC LIMIT 1",
+            (email, ts),
+        ).fetchone()
+        if row is None:
+            return False
+        if len(digits) == 6 and hmac.compare_digest(row["code_hash"], _digest(secret, email, digits)):
+            conn.execute("UPDATE login_codes SET consumed_at = ? WHERE id = ?", (ts, row["id"]))
+            return True
+        attempts = row["attempts"] + 1
+        conn.execute(
+            "UPDATE login_codes SET attempts = ?,"
+            " consumed_at = CASE WHEN ? >= ? THEN ? ELSE NULL END WHERE id = ?",
+            (attempts, attempts, MAX_ATTEMPTS, ts, row["id"]),
+        )
+        return False
