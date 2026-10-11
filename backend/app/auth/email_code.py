@@ -38,24 +38,27 @@ def seconds_until_resend(conn: sqlite3.Connection, email: str, now: int | None =
 
 def issue_code(conn: sqlite3.Connection, secret: str, email: str, ip: str, now: int | None = None) -> str:
     ts = db.now() if now is None else now
-    wait = seconds_until_resend(conn, email, ts)
-    if wait:
-        raise RateLimited("email_interval", wait)
     since = ts - HOUR
-    recent = conn.execute(
-        "SELECT created_at FROM login_codes WHERE email = ? AND created_at > ? ORDER BY created_at",
-        (email, since),
-    ).fetchall()
-    if len(recent) >= EMAIL_PER_HOUR:
-        raise RateLimited("email_hour", recent[0]["created_at"] + HOUR - ts)
-    recent = conn.execute(
-        "SELECT created_at FROM login_codes WHERE ip = ? AND created_at > ? ORDER BY created_at",
-        (ip, since),
-    ).fetchall()
-    if len(recent) >= IP_PER_HOUR:
-        raise RateLimited("ip", recent[0]["created_at"] + HOUR - ts)
     code = f"{secrets.randbelow(1_000_000):06d}"
+    # The limit checks and the insert share one BEGIN IMMEDIATE transaction. SQLite then admits one
+    # writer at a time, so concurrent requests (one connection each) cannot all pass the checks
+    # before any of them inserts. RateLimited raised in here rolls the transaction back untouched.
     with db.transaction(conn):
+        wait = seconds_until_resend(conn, email, ts)
+        if wait:
+            raise RateLimited("email_interval", wait)
+        recent = conn.execute(
+            "SELECT created_at FROM login_codes WHERE email = ? AND created_at > ? ORDER BY created_at",
+            (email, since),
+        ).fetchall()
+        if len(recent) >= EMAIL_PER_HOUR:
+            raise RateLimited("email_hour", recent[0]["created_at"] + HOUR - ts)
+        recent = conn.execute(
+            "SELECT created_at FROM login_codes WHERE ip = ? AND created_at > ? ORDER BY created_at",
+            (ip, since),
+        ).fetchall()
+        if len(recent) >= IP_PER_HOUR:
+            raise RateLimited("ip", recent[0]["created_at"] + HOUR - ts)
         conn.execute("DELETE FROM login_codes WHERE created_at < ?", (ts - 86400,))
         conn.execute(
             "UPDATE login_codes SET consumed_at = ? WHERE email = ? AND consumed_at IS NULL", (ts, email)

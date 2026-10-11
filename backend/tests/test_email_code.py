@@ -1,4 +1,5 @@
 import re
+import threading
 
 import pytest
 
@@ -10,8 +11,13 @@ EMAIL = "a@b.co"
 
 
 @pytest.fixture
-def conn(tmp_path):
-    c = db.connect(tmp_path / "app.db")
+def db_path(tmp_path):
+    return tmp_path / "app.db"
+
+
+@pytest.fixture
+def conn(db_path):
+    c = db.connect(db_path)
     db.init_db(c)
     yield c
     c.close()
@@ -76,3 +82,64 @@ def test_hourly_limit_per_ip(conn):
     with pytest.raises(ec.RateLimited) as info:
         ec.issue_code(conn, SECRET, "late@b.co", "9.9.9.9", now=1100)
     assert info.value.scope == "ip"
+
+
+def _race(db_path, n, args_for):
+    """Call issue_code from n threads, each on its own connection, released together."""
+    barrier = threading.Barrier(n)
+    results: list = [None] * n
+
+    def work(i):
+        c = db.connect(db_path)
+        try:
+            barrier.wait(timeout=10)
+            email, ip = args_for(i)
+            try:
+                results[i] = ec.issue_code(c, SECRET, email, ip, now=1000)
+            except ec.RateLimited as exc:
+                results[i] = exc
+        finally:
+            c.close()
+
+    threads = [threading.Thread(target=work, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert not any(t.is_alive() for t in threads)
+    # Anything other than a code or RateLimited (e.g. "database is locked") is a failure.
+    assert all(isinstance(r, (str, ec.RateLimited)) for r in results), results
+    return results
+
+
+def test_concurrent_requests_for_one_email_issue_exactly_one_code(conn, db_path):
+    n = 30
+    results = _race(db_path, n, lambda i: (EMAIL, f"10.0.0.{i}"))
+    issued = [r for r in results if isinstance(r, str)]
+    limited = [r for r in results if isinstance(r, ec.RateLimited)]
+    assert len(issued) == 1
+    assert len(limited) == n - 1
+    assert {r.scope for r in limited} == {"email_interval"}
+    assert conn.execute("SELECT COUNT(*) AS n FROM login_codes WHERE email = ?", (EMAIL,)).fetchone()["n"] == 1
+    assert ec.verify_code(conn, SECRET, EMAIL, issued[0], now=1001) is True
+
+
+def test_concurrent_requests_from_one_ip_stop_at_the_hourly_cap(conn, db_path):
+    n = ec.IP_PER_HOUR + 10
+    results = _race(db_path, n, lambda i: (f"u{i}@b.co", "9.9.9.9"))
+    issued = [r for r in results if isinstance(r, str)]
+    limited = [r for r in results if isinstance(r, ec.RateLimited)]
+    assert len(issued) == ec.IP_PER_HOUR
+    assert len(limited) == n - ec.IP_PER_HOUR
+    assert {r.scope for r in limited} == {"ip"}
+    assert conn.execute("SELECT COUNT(*) AS n FROM login_codes WHERE ip = '9.9.9.9'").fetchone()["n"] == ec.IP_PER_HOUR
+
+
+def test_rate_limited_issue_leaves_no_trace(conn):
+    first = ec.issue_code(conn, SECRET, EMAIL, "1.1.1.1", now=1000)
+    with pytest.raises(ec.RateLimited):
+        ec.issue_code(conn, SECRET, EMAIL, "1.1.1.1", now=1010)
+    assert conn.in_transaction is False
+    assert conn.execute("SELECT COUNT(*) AS n FROM login_codes").fetchone()["n"] == 1
+    # The rejected request must not have consumed the code that is still valid.
+    assert ec.verify_code(conn, SECRET, EMAIL, first, now=1011) is True
