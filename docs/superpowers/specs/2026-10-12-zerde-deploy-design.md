@@ -1,6 +1,6 @@
 # Zerde Deploy — design
 
-Date: 2026-10-12 · Status: approved in brainstorming, pending spec review
+Date: 2026-10-12 · Status: approved; implementation plan: docs/superpowers/plans/2026-10-12-zerde-deploy.md
 
 A small, fast, self-hosted "Netlify Drop" for static HTML projects. Signed-in,
 allowlisted people drop a folder / files / `.zip` / single `.html` and get a live
@@ -90,9 +90,9 @@ the dashboard, auth, uploads and the TLS `ask` check.
 
 ## 5. Data model (SQLite)
 
-- `users(id, email UNIQUE, name, avatar_url, google_sub UNIQUE NULL, lang, created_at, last_login_at)`
+- `users(id, email UNIQUE, name, avatar_url, google_sub UNIQUE NULL, created_at, last_login_at)`
 - `allowlist(id, pattern UNIQUE, added_by, created_at)` — pattern is `user@x.com` or `@x.com`
-- `sessions(token_hash PK, user_id, created_at, expires_at, last_seen_at)`
+- `sessions(token_hash PK, user_id, created_at, expires_at)`
 - `login_codes(id, email, code_hash, ip, created_at, expires_at, attempts, consumed_at)`
 - `sites(id, name UNIQUE, owner_id, current_deploy_id NULL, created_at, updated_at)`
 - `deploys(id, site_id, created_by, file_count, total_bytes, created_at)`
@@ -122,7 +122,7 @@ Email code
 Sessions
 - 32-byte random token in cookie `__Host-zd_session` (HttpOnly, Secure, SameSite=Lax,
   Path=/). On plain-HTTP localhost the cookie is named `zd_session` without `Secure`.
-- Only `sha256(token)` is stored; 30-day expiry, sliding refresh at most daily.
+- Only `sha256(token)` is stored; fixed 30-day expiry (sign in again afterwards).
 - Every state-changing request (POST/PATCH/DELETE) must carry `Origin` (or `Referer`)
   equal to the app origin, else 403. This blocks CSRF from deployed sites.
 - Logout deletes the session row and the cookie.
@@ -213,14 +213,15 @@ Pages
 Visual system (finalised with the design skill during implementation)
 - Warm paper background, near-black ink, one accent colour for primary actions,
   1 px borders instead of shadows, generous spacing, automatic dark mode.
-- IBM Plex Sans + IBM Plex Mono, self-hosted subset WOFF2 (must include
-  ә ғ қ ң ө ұ ү һ і); `font-display: swap`.
+- IBM Plex Sans 400/600, self-hosted WOFF2 subsets latin + cyrillic + cyrillic-ext (covers
+  ә ғ қ ң ө ұ ү һ і); `font-display: swap`. Monospace uses the system stack (no download).
+- Language switch labels: `Eng · Рус · Қаз`. The admin page is called "Access".
 - Banned: gradients, glassmorphism, glow blobs, emoji icons, centered marketing hero,
   three-card feature grids, hype copy.
 - Icons: a handful of inline SVGs.
 
 Weight budget (per page, transferred, gzip): HTML ≤ 15 KB, CSS ≤ 12 KB, JS ≤ 8 KB,
-fonts ≤ 80 KB total (cached), no third-party requests except Google Identity Services
+all WOFF2 files ≤ 100 KB total (cached; a page downloads only the subsets it uses), no third-party requests except Google Identity Services
 script on `/login` (only when Google sign-in is enabled).
 
 ## 10. Internationalisation
@@ -233,9 +234,10 @@ script on `/login` (only when Google sign-in is enabled).
 
 ## 11. Configuration (`.env`)
 
-`APP_DOMAIN`, `SITES_DOMAIN`, `APP_ORIGIN` (derived), `SECRET_KEY`, `GOOGLE_CLIENT_ID`,
+`APP_DOMAIN`, `SITES_DOMAIN`, `HTTPS` (origin and cookie flags derive from it), `ACME_EMAIL` (Caddy),
+`SECRET_KEY`, `GOOGLE_CLIENT_ID`,
 `ADMIN_EMAILS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`,
-`SMTP_STARTTLS`, `DATA_DIR`, `SERVE_SITES_IN_APP`, `MAX_UPLOAD_MB`, `MAX_FILES`.
+`SMTP_STARTTLS`, `DATA_DIR`, `SERVE_SITES_IN_APP`, `MAX_UPLOAD_MB`, `MAX_FILES`, `MAX_FILE_MB`.
 The owner sets secrets (SMTP password, SECRET_KEY) on the server; they are never
 committed. `.env.example` documents every key.
 
@@ -243,7 +245,8 @@ committed. `.env.example` documents every key.
 
 - Upload errors are specific and translated (too big, too many files, no index.html,
   unsafe path, bad zip, not allowed).
-- Network failure mid-upload → retry button; server cleans temp dirs on failure and on start.
+- Network failure mid-upload → error message and the drop zone returns so the user can drop again;
+  the server cleans temp dirs on failure and on start.
 - Concurrent deploys to the same site are serialised with a per-site file lock;
   the last one to finish wins.
 - Expired session → redirect to `/login` with a return path.
