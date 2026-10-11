@@ -63,8 +63,11 @@ async def handle_upload(
     store = request.app.state.store
     limits = limits_for(settings)
     back = f"/sites/{site['name']}" if site else "/"
+    # request.form() spools the whole multipart body to temp files before ingest can count a byte of it, so the
+    # size has to be known and within the cap up front. Browsers always send Content-Length for FormData; a
+    # chunked or malformed request is refused instead of being read without bound.
     declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > limits.max_total_bytes + MB:
+    if not (declared.isascii() and declared.isdigit()) or int(declared) > limits.max_total_bytes + MB:
         return upload_failed(request, UploadError("too_big", mb=settings.max_upload_mb), back)
     try:
         form = await request.form(max_files=limits.max_files + 1, max_fields=limits.max_files + 32)
