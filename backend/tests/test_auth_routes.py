@@ -1,6 +1,8 @@
 import dataclasses
 import re
 
+import pytest
+
 from app.auth.google import GoogleIdentity
 from tests.helpers import ADMIN, last_code, sign_in
 
@@ -61,6 +63,31 @@ def test_unsafe_next_is_ignored(client, mailer):
     assert start.headers["location"] == "/login/code?next=/"
     done = client.post("/auth/email/verify", data={"code": last_code(mailer), "next": "https://evil.test"}, follow_redirects=False)
     assert done.headers["location"] == "/"
+
+
+# Browsers strip tab/CR/LF before parsing a URL, so "/\t/evil.test" would become "//evil.test".
+CONTROL_CHAR_NEXT = ["/\t/evil.test", "/\n/evil.test", "/\r/evil.test", "/ /evil.test", "/\x00/evil.test", "/\x7f/evil.test"]
+
+
+@pytest.mark.parametrize("bad", CONTROL_CHAR_NEXT)
+def test_login_page_drops_control_characters_from_next(client, bad):
+    page = client.get("/login", params={"next": bad})
+    assert 'data-next="/"' in page.text and "evil.test" not in page.text
+
+
+@pytest.mark.parametrize("bad", CONTROL_CHAR_NEXT)
+def test_email_flow_drops_control_characters_from_next(client, mailer, bad):
+    start = client.post("/auth/email/start", data={"email": "a@b.co", "next": bad}, follow_redirects=False)
+    assert start.headers["location"] == "/login/code?next=/"
+    done = client.post("/auth/email/verify", data={"code": last_code(mailer), "next": bad}, follow_redirects=False)
+    assert done.status_code == 303 and done.headers["location"] == "/"
+
+
+@pytest.mark.parametrize("bad", CONTROL_CHAR_NEXT)
+def test_google_sign_in_drops_control_characters_from_next(client, google, bad):
+    google.tokens["good"] = GoogleIdentity(sub="g-2", email="bo@zerde.ai", name="Bo", picture="")
+    response = client.post("/auth/google", json={"credential": "good", "next": bad}, headers=JSON)
+    assert response.status_code == 200 and response.json() == {"redirect": "/"}
 
 
 def test_code_page_requires_pending_email(client):

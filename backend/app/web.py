@@ -37,7 +37,19 @@ def wants_json(request: Request) -> bool:
 
 
 def safe_next(value: str | None) -> str:
-    if value and value.startswith("/") and not value.startswith("//") and "\\" not in value:
+    """Return `value` only if it is a same-site absolute path, else "/".
+
+    Control characters and whitespace are rejected outright: browsers strip tab, CR and LF
+    from a URL before parsing it, so "/\\t/evil.test" would resolve to "//evil.test" when a
+    script hands it to location.assign().
+    """
+    if (
+        value
+        and value.startswith("/")
+        and not value.startswith("//")
+        and "\\" not in value
+        and all(ord(ch) > 0x20 and ord(ch) != 0x7F for ch in value)
+    ):
         return value
     return "/"
 
