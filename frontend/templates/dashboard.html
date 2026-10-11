@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_drop.html" import drop_zone with context %}
+{% from "_icons.html" import copy_icon %}
+{% block title %}{{ t("dash.title") }}{% endblock %}
+{% block main %}
+<h1 class="visually-hidden">{{ t("dash.title") }}</h1>
+{{ drop_zone("/deploy", t("drop.title")) }}
+<section class="sites" aria-labelledby="sites-title">
+  <h2 id="sites-title">{{ t("dash.yours") }}</h2>
+  {% if sites %}
+  <ul class="list" role="list">
+    {% for site in sites %}{% set url = settings.site_url(site.name) %}
+    <li class="site-row">
+      <div class="site-main">
+        <a class="site-link" href="{{ url }}" target="_blank" rel="noopener">{{ site.name }}.{{ settings.sites_domain }}</a>
+        <span class="site-meta">{{ ago(site.deployed_at or site.updated_at) }} · {{ size(site.total_bytes or 0) }}</span>
+      </div>
+      <div class="site-actions">
+        <button class="btn btn-quiet" type="button" data-copy="{{ url }}">{{ copy_icon() }}<span>{{ t("sites.copy") }}</span></button>
+        <a class="btn btn-quiet" href="/sites/{{ site.name }}">{{ t("sites.settings") }}</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">{{ t("sites.empty") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

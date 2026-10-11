@@ -1,0 +1,21 @@
+{% from "_icons.html" import upload_icon %}
+{% macro drop_zone(action, title) %}
+<form class="drop" id="drop" method="post" action="{{ action }}" enctype="multipart/form-data">
+  <div class="drop-idle">
+    {{ upload_icon() }}
+    <p class="drop-title">{{ title }}</p>
+    <p class="drop-hint">{{ t("drop.hint", mb=settings.max_upload_mb, files=settings.max_files) }}</p>
+    <div class="drop-buttons">
+      <label class="btn btn-primary"><input class="visually-hidden" type="file" name="files" multiple>{{ t("drop.choose_files") }}</label>
+      <label class="btn btn-secondary"><input class="visually-hidden" type="file" name="files" webkitdirectory multiple>{{ t("drop.choose_folder") }}</label>
+      <noscript><button class="btn btn-secondary" type="submit">{{ t("drop.submit") }}</button></noscript>
+    </div>
+    <p class="drop-error" role="alert" hidden></p>
+  </div>
+  <div class="drop-busy" hidden>
+    <p class="drop-status" aria-live="polite"></p>
+    <div class="bar" aria-hidden="true"><span></span></div>
+    <button class="btn btn-secondary drop-cancel" type="button">{{ t("js.cancel") }}</button>
+  </div>
+</form>
+{% endmacro %}

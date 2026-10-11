@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ t("noaccess.title") }}{% endblock %}
+{% block main %}
+<section class="auth">
+  <h1>{{ t("noaccess.title") }}</h1>
+  <p class="lead">{{ t("noaccess.body", email=user.email) }}</p>
+  <form method="post" action="/auth/logout"><button class="btn btn-secondary" type="submit">{{ t("nav.sign_out") }}</button></form>
+</section>
+{% endblock %}
