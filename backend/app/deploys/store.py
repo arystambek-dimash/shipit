@@ -40,9 +40,16 @@ class SiteStore:
     def publish(self, name: str, staging: Path, deploy_id: int) -> None:
         target = self.deploy_dir(name, deploy_id)
         target.parent.mkdir(parents=True, exist_ok=True)
+        # Deploy ids are not unique forever (SQLite reuses a freed rowid), so whatever sits at the
+        # target is a leftover of an earlier failed or crashed publish: replace it.
+        self._remove(target, ignore_errors=False)
         staging.rename(target)
-        target.chmod(0o755)  # mkdtemp creates 0700; the web server must be able to read it
-        self.activate(name, deploy_id)
+        try:
+            target.chmod(0o755)  # mkdtemp creates 0700; the web server must be able to read it
+            self.activate(name, deploy_id)
+        except BaseException:
+            self._remove(target)  # no half-published tree for the next attempt to trip over
+            raise
 
     def activate(self, name: str, deploy_id: int) -> None:
         if not self.deploy_dir(name, deploy_id).is_dir():
@@ -60,6 +67,12 @@ class SiteStore:
             return None
         return int(os.readlink(link).rsplit("/", 1)[-1])
 
+    def discard(self, name: str, deploy_id: int) -> None:
+        """Remove one deploy tree, and `current` as well if it still points at it (never left dangling)."""
+        if self.current_deploy(name) == deploy_id:
+            self.current_dir(name).unlink()
+        self._remove(self.deploy_dir(name, deploy_id))
+
     def prune(self, name: str, keep: set[int]) -> None:
         root = self.site_dir(name) / "deploys"
         if not root.is_dir():
@@ -76,6 +89,13 @@ class SiteStore:
 
     def delete(self, name: str) -> None:
         shutil.rmtree(self.site_dir(name), ignore_errors=True)
+
+    @staticmethod
+    def _remove(path: Path, *, ignore_errors: bool = True) -> None:
+        if path.is_symlink() or path.is_file():
+            path.unlink(missing_ok=True)
+        elif path.exists():
+            shutil.rmtree(path, ignore_errors=ignore_errors)
 
     @contextmanager
     def lock(self, name: str) -> Iterator[None]:

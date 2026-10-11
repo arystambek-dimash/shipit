@@ -60,3 +60,43 @@ def test_cleanup_temp_and_lock(store):
     assert not leftover.exists()
     with store.lock("demo"):
         pass
+
+
+def test_publish_replaces_a_leftover_target_with_the_same_id(store):
+    leftover = store.deploy_dir("demo", 1)
+    leftover.mkdir(parents=True)
+    (leftover / "stale.html").write_text("stale")
+    store.publish("demo", staged(store, "v1"), 1)
+    assert (store.current_dir("demo") / "index.html").read_text() == "v1"
+    assert not (store.deploy_dir("demo", 1) / "stale.html").exists()
+
+
+def test_failed_activate_leaves_no_half_published_tree(store, monkeypatch):
+    store.publish("demo", staged(store, "v1"), 1)
+    real_activate = store.activate
+
+    def broken(name, deploy_id):
+        raise OSError("injected")
+
+    monkeypatch.setattr(store, "activate", broken)
+    for _ in range(2):  # a retry must not trip over the first attempt's tree
+        with pytest.raises(OSError, match="injected"):
+            store.publish("demo", staged(store, "v2"), 2)
+        assert not store.deploy_dir("demo", 2).exists()
+        assert store.current_deploy("demo") == 1
+    monkeypatch.setattr(store, "activate", real_activate)
+    store.publish("demo", staged(store, "v2"), 2)
+    assert (store.current_dir("demo") / "index.html").read_text() == "v2"
+
+
+def test_discard_removes_the_tree_and_never_leaves_current_dangling(store):
+    store.publish("demo", staged(store, "v1"), 1)
+    store.publish("demo", staged(store, "v2"), 2)
+    store.discard("demo", 1)
+    assert not store.deploy_dir("demo", 1).exists()
+    assert store.current_deploy("demo") == 2
+    store.discard("demo", 2)
+    assert not store.deploy_dir("demo", 2).exists()
+    assert store.current_deploy("demo") is None
+    assert not os.path.lexists(store.current_dir("demo"))
+    store.discard("demo", 2)  # already gone: no error
