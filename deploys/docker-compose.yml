@@ -42,6 +42,13 @@ services:
         soft: 65535
         hard: 65535
 
+# IPv6 on the compose network lets Docker forward IPv6 visitors to Caddy with their own address (ip6tables
+# NAT). On an IPv4-only network Docker's userland proxy relays them instead, and every IPv6 visitor reaches
+# Caddy, and the app's per-IP sign-in limit, from one gateway address.
+networks:
+  default:
+    enable_ipv6: true
+
 volumes:
   sitedata:
   caddy_data:

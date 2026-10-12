@@ -13,6 +13,8 @@ Server: Ubuntu, `212.116.232.74` / `2a00:5da0:1:201::522`, user `ubuntu`.
 
 Check: `dig +short deploy.zerde.ai` and `dig +short anything.deploy.zerde.ai` both print the IP.
 
+The AAAA records rely on IPv6 being enabled on the compose network (`docker-compose.yml`, `networks.default.enable_ipv6`), so that Docker hands IPv6 visitors to Caddy with their real address. Docker 27 and later allocate the network's IPv6 subnet themselves and have `ip6tables` on by default; do not set `"ip6tables": false` in `/etc/docker/daemon.json`. After the first deploy, `docker network inspect zerde-deploy_default --format '{{.EnableIPv6}}'` must print `true`. If it prints `false` (a network created before this setting), run `docker compose down && docker compose up -d` once in `/opt/zerde-deploy/deploys`; volumes and certificates are kept. Until it prints `true`, leave the AAAA records out: every IPv6 visitor would reach the app from the same Docker gateway address and share one sign-in rate limit (20 codes per hour).
+
 ## 2. SSH key instead of a password
 
 On your Mac:
