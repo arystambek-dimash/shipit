@@ -97,6 +97,22 @@ def test_lock_excludes_other_processes_until_released(store, tmp_path):
     assert marker.read_text() == "acquired"
 
 
+def test_cleanup_spares_staging_dirs_that_are_in_use(store):
+    # Every uvicorn worker cleans tmp when it starts, also one respawned while another worker is staging.
+    leftover = store.new_staging_dir()  # left behind by a process that died
+    (leftover / "x").write_text("x")
+    with store.staging() as live:
+        (live / "index.html").write_text("i")
+        starting_worker = "import sys; from pathlib import Path; from app.deploys.store import SiteStore; " \
+            "SiteStore(Path(sys.argv[1]), Path(sys.argv[2])).cleanup_temp()"
+        args = [sys.executable, "-c", starting_worker, str(store.sites_dir), str(store.tmp_dir)]
+        subprocess.run(args, cwd=BACKEND_DIR, check=True, timeout=10)
+        assert (live / "index.html").read_text() == "i"
+        assert not leftover.exists()
+    assert not live.exists()
+    assert list(store.tmp_dir.iterdir()) == []
+
+
 def test_lock_is_per_site(store, tmp_path):
     marker = tmp_path / "acquired"
     with store.lock("demo"):

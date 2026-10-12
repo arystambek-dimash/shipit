@@ -30,12 +30,51 @@ class SiteStore:
     def new_staging_dir(self) -> Path:
         return Path(tempfile.mkdtemp(prefix="upload-", dir=self.tmp_dir))
 
+    @contextmanager
+    def staging(self) -> Iterator[Path]:
+        """A new staging dir for one upload: locked while in use, removed afterwards.
+
+        Every worker process runs cleanup_temp() when it starts, and uvicorn starts a new worker whenever
+        one dies, possibly while another worker is still staging an upload. The lock tells cleanup_temp to
+        leave this dir alone. A process that dies releases its locks, so its leftovers do get cleaned.
+        """
+        while True:
+            path = self.new_staging_dir()
+            try:
+                fd = os.open(path, os.O_RDONLY)
+            except FileNotFoundError:  # a starting worker's cleanup removed it before we could lock it
+                continue
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                if os.path.samestat(os.fstat(fd), os.stat(path)):
+                    break
+            except FileNotFoundError:
+                pass
+            os.close(fd)  # removed while we waited for the lock: draw another one
+        try:
+            yield path
+        finally:
+            shutil.rmtree(path, ignore_errors=True)  # already gone if it was published
+            os.close(fd)
+
     def cleanup_temp(self) -> None:
+        """Remove what earlier processes left in tmp_dir, sparing staging dirs a live upload holds."""
         for child in self.tmp_dir.iterdir():
-            if child.is_dir():
-                shutil.rmtree(child, ignore_errors=True)
-            else:
+            if child.is_symlink() or not child.is_dir():
                 child.unlink(missing_ok=True)
+                continue
+            try:
+                fd = os.open(child, os.O_RDONLY)
+            except FileNotFoundError:
+                continue
+            try:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue  # another worker is staging an upload in it
+                shutil.rmtree(child, ignore_errors=True)
+            finally:
+                os.close(fd)
 
     def publish(self, name: str, staging: Path, deploy_id: int) -> None:
         target = self.deploy_dir(name, deploy_id)

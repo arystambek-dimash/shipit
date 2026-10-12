@@ -1,4 +1,7 @@
 from app import access
+from app.auth.mailer import ConsoleMailer
+from app.deploys import ingest
+from app.main import create_app
 from tests.helpers import ADMIN, sign_in, upload_zip
 
 JSON = {"accept": "application/json"}
@@ -146,3 +149,24 @@ def test_unusable_or_oversized_content_length_is_rejected(client, mailer):
         )
         assert response.status_code == 400, bad
         assert response.json() == {"error": "The upload is larger than 5 MB."}, bad
+
+
+def test_a_worker_starting_mid_upload_leaves_the_upload_alone(client, mailer, settings, monkeypatch):
+    # uvicorn respawns a worker that dies; the new worker's create_app cleans tmp while another worker is
+    # extracting a zip there. That used to delete the files written so far and publish the rest as live.
+    sign_in(client, mailer, ADMIN)
+    real_write, writes = ingest._write, []
+
+    def write_then_respawn(stream, dest, rel, budget):
+        real_write(stream, dest, rel, budget)
+        writes.append(rel)
+        if len(writes) == 2:
+            create_app(settings, mailer=ConsoleMailer())
+
+    monkeypatch.setattr(ingest, "_write", write_then_respawn)
+    files = {"assets/app.js": b"js", "assets/style.css": b"css", "assets/logo.png": b"png", "index.html": b"home"}
+    response = upload_zip(client, files)
+    assert response.status_code == 201, response.text
+    site = f"http://{response.json()['name']}.localhost:8000"
+    for path, data in files.items():
+        assert client.get(f"{site}/{path}").content == data, path

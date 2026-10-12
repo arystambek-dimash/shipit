@@ -1,7 +1,6 @@
 """Upload, site page and site actions."""
 from __future__ import annotations
 
-import shutil
 import sqlite3
 from pathlib import Path
 
@@ -73,25 +72,24 @@ async def handle_upload(
         form = await request.form(max_files=limits.max_files + 1, max_fields=limits.max_files + 32)
     except StarletteHTTPException:
         return upload_failed(request, UploadError("too_many_files", n=limits.max_files), back)
-    staging = store.new_staging_dir()
     try:
-        uploads = form.getlist("files")
-        paths = [str(path) for path in form.getlist("paths")]
-        pairs = [
-            (upload, paths[index] if index < len(paths) else "")
-            for index, upload in enumerate(uploads)
-            if isinstance(upload, UploadFile) and upload.filename
-        ]
-        staged = await run_in_threadpool(stage_upload, pairs, staging, limits)
-        name, deploy_id = await run_in_threadpool(
-            service.publish, conn, store, site=site, user_id=user["id"], staged=staged,
-        )
+        with store.staging() as staging:
+            uploads = form.getlist("files")
+            paths = [str(path) for path in form.getlist("paths")]
+            pairs = [
+                (upload, paths[index] if index < len(paths) else "")
+                for index, upload in enumerate(uploads)
+                if isinstance(upload, UploadFile) and upload.filename
+            ]
+            staged = await run_in_threadpool(stage_upload, pairs, staging, limits)
+            name, deploy_id = await run_in_threadpool(
+                service.publish, conn, store, site=site, user_id=user["id"], staged=staged,
+            )
     except UploadError as error:
         return upload_failed(request, error, back)
     except service.SiteError:  # renamed or deleted while the upload ran: nothing was published
         return upload_failed(request, UploadError("site_gone"), "/", status=404)
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
         await form.close()
     message = i18n.t(request.state.lang, "flash.deployed")
     if wants_json(request):
