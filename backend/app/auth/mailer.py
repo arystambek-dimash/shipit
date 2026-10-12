@@ -25,13 +25,16 @@ class Mailer(Protocol):
 
 
 class ConsoleMailer:
-    """Development mailer: keeps messages in memory and logs them."""
+    """Development mailer: logs messages and keeps the most recent ones in memory (tests read them)."""
+
+    KEEP = 20
 
     def __init__(self) -> None:
         self.sent: list[Message] = []
 
     def send(self, message: Message) -> None:
         self.sent.append(message)
+        del self.sent[: -self.KEEP]
         log.warning("Email to %s | %s\n%s", message.to, message.subject, message.body)
 
 

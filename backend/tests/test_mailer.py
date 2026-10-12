@@ -53,3 +53,10 @@ def test_smtp_mailer_uses_ssl_on_465(monkeypatch):
     settings = Settings(smtp_host="smtp.test", smtp_port=465, smtp_from="noreply@zerde.ai")
     SmtpMailer(settings).send(Message("a@b.co", "S", "B"))
     assert FakeSMTP.instances[0].calls == [("send", "a@b.co", "S", "noreply@zerde.ai")]
+
+
+def test_console_mailer_keeps_only_the_latest_20_messages():
+    m = ConsoleMailer()
+    for i in range(25):
+        m.send(Message("a@b.co", f"#{i}", "Body"))
+    assert [message.subject for message in m.sent] == [f"#{i}" for i in range(5, 25)]
