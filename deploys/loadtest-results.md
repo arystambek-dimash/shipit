@@ -91,3 +91,19 @@ docker run --rm --network host --ulimit nofile=65535:65535 ghcr.io/hatoo/oha:1.1
 ```
 
 Pass: `Success rate: 100.00%`, only `[200]` under `Status code distribution`, p95 < 300 ms.
+
+## Production — 2026-10-12, https://steady-birch-77.deploy.zerde.ai/
+
+Server: Ubuntu 22.04, 2 vCPU, 1.9 GB RAM, Docker 29.9, caddy:2.11. Page: test site index (641 B gzipped).
+Tool: `oha -c 1000 -z <t> -H "Accept-Encoding: gzip"` (1000 concurrent keep-alive connections, each opened with a full TLS handshake).
+
+| Run | Duration | Requests | Req/s | Success | p50 | p95 | p99 | Server during run |
+|---|---|---|---|---|---|---|---|---|
+| From a Mac over home internet (Kazakhstan → server) | 30 s | 85,600 | 2,852 | 99.66 % | 118 ms | 1.10 s | 2.26 s | load avg 0.88; app 0.8 % CPU / 130 MB, Caddy ~100 MB |
+| On the server itself (oha container, host network) | 20 s | ~57,200 | 2,859 | 100.00 % | 333 ms | 0.95 s | 2.04 s | Caddy 138 % CPU / 132 MB, oha 37 % CPU, app 0.6 % CPU |
+
+Reading the numbers:
+- The Python app is not on the visitor path; Caddy serves sites from disk, so app CPU stays under 1 %.
+- From the Mac, the 0.34 % failures and the slow tail come from the client side: 1000 simultaneous TLS handshakes over a home connection (average connect 1.86 s). On the server the same test has 0 errors.
+- The 2-vCPU box is CPU-bound around 2.8k req/s with the load generator sharing the CPU. 1000 people browsing at the same time generate far fewer requests than 1000 connections firing back-to-back, so this is several times the stated target.
+- To go further: more vCPUs (Caddy scales across cores) or a caching CDN in front of `*.deploy.zerde.ai`.
