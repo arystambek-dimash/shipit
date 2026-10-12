@@ -24,6 +24,9 @@ from .routes import admin, auth, internal, pages, sites
 from .web import redirect, render, wants_json
 
 ERROR_KEYS = {403: "error.forbidden", 404: "error.not_found", 405: "error.not_found"}
+# Deployed sites are same-site with the app, so a framed app page would get the session cookie and its
+# forms would pass the Origin check: an evil site could overlay one and steal a click. Never be framed.
+NO_FRAMING = {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'"}
 
 
 class CachedStatic(StaticFiles):
@@ -70,17 +73,19 @@ def create_app(settings: Settings | None = None, *, mailer=None, google=None) ->
             name = host[: -len(settings.sites_domain) - 1]
             return await run_in_threadpool(serve_site_file, settings, name, request.url.path)
         if not sessions.origin_allowed(request.method, request.headers, settings.app_origin):
-            return PlainTextResponse("Cross-origin request blocked", status_code=403)
-        query_lang = request.query_params.get("lang")
-        request.state.lang = i18n.negotiate(
-            query_lang, request.cookies.get(i18n.LANG_COOKIE), request.headers.get("accept-language")
-        )
-        response = await call_next(request)
-        if query_lang in i18n.LANGS:
-            response.set_cookie(
-                i18n.LANG_COOKIE, query_lang, max_age=365 * 86400, path="/",
-                secure=settings.https, httponly=True, samesite="lax",
+            response = PlainTextResponse("Cross-origin request blocked", status_code=403)
+        else:
+            query_lang = request.query_params.get("lang")
+            request.state.lang = i18n.negotiate(
+                query_lang, request.cookies.get(i18n.LANG_COOKIE), request.headers.get("accept-language")
             )
+            response = await call_next(request)
+            if query_lang in i18n.LANGS:
+                response.set_cookie(
+                    i18n.LANG_COOKIE, query_lang, max_age=365 * 86400, path="/",
+                    secure=settings.https, httponly=True, samesite="lax",
+                )
+        response.headers.update(NO_FRAMING)
         return response
 
     @app.exception_handler(NotSignedIn)

@@ -1,5 +1,5 @@
 from app.devsites import resolve_site_file
-from tests.helpers import publish_site
+from tests.helpers import ADMIN, publish_site, sign_in
 
 
 def test_unknown_page_renders_translated_404(client):
@@ -106,3 +106,26 @@ def test_resolve_site_file_stays_inside_the_site(tmp_path):
         "/linkdir/",
     ):
         assert resolve_site_file(root, url_path) is None, url_path
+
+
+def test_app_pages_refuse_to_be_framed(client, mailer, app, conn):
+    # A deployed site is same-site with the app: framed, an app form would carry the session cookie and
+    # the app's own Origin, so only these headers stop a click being stolen.
+    sign_in(client, mailer, ADMIN)
+    name = publish_site(app, conn)
+    expected = {"/": 200, "/admin": 200, f"/sites/{name}": 200, "/login": 303, "/nope": 404, "/healthz": 200,
+                "/static/css/app.css": 200}
+    for path, status in expected.items():
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == status, path
+        assert response.headers["x-frame-options"] == "DENY", path
+        assert response.headers["content-security-policy"] == "frame-ancestors 'none'", path
+    blocked = client.post("/auth/logout", headers={"origin": "http://evil.localhost:8000"})
+    assert blocked.status_code == 403 and blocked.headers["x-frame-options"] == "DENY"
+
+
+def test_deployed_sites_may_be_framed(client, app, conn):
+    name = publish_site(app, conn)
+    response = client.get(f"http://{name}.localhost:8000/")
+    assert response.status_code == 200
+    assert "x-frame-options" not in response.headers and "content-security-policy" not in response.headers
