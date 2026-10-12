@@ -143,3 +143,16 @@ def test_rate_limited_issue_leaves_no_trace(conn):
     assert conn.execute("SELECT COUNT(*) AS n FROM login_codes").fetchone()["n"] == 1
     # The rejected request must not have consumed the code that is still valid.
     assert ec.verify_code(conn, SECRET, EMAIL, first, now=1011) is True
+
+
+def test_seconds_until_resend_covers_every_limit(conn):
+    # The resend button counts down to when a code can really be sent, not only the 60 s interval.
+    for i in range(ec.EMAIL_PER_HOUR):
+        ec.issue_code(conn, SECRET, EMAIL, "1.1.1.1", now=1000 + i * 61)
+    now = 1000 + 5 * 61 + 100
+    assert ec.seconds_until_resend(conn, EMAIL, now=now) == 1000 + ec.HOUR - now
+    for i in range(ec.IP_PER_HOUR):
+        ec.issue_code(conn, SECRET, f"u{i}@b.co", "2.2.2.2", now=2000 + i)
+    assert ec.seconds_until_resend(conn, "fresh@b.co", now=2100, ip="2.2.2.2") == 2000 + ec.HOUR - 2100
+    assert ec.seconds_until_resend(conn, "fresh@b.co", now=2100, ip="3.3.3.3") == 0
+    assert ec.seconds_until_resend(conn, "fresh@b.co", now=2100) == 0

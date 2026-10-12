@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+from typing import Iterator
 
 from .. import db
 
@@ -28,37 +29,45 @@ def _digest(secret: str, email: str, code: str) -> str:
     return hmac.new(secret.encode(), f"{email}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def seconds_until_resend(conn: sqlite3.Connection, email: str, now: int | None = None) -> int:
-    ts = db.now() if now is None else now
+def _limits(conn: sqlite3.Connection, email: str, ip: str | None, ts: int) -> Iterator[tuple[str, int]]:
+    """(scope, seconds to wait) for each limit that a new code for `email` from `ip` would break at `ts`."""
+    since = ts - HOUR
     last = conn.execute(
         "SELECT MAX(created_at) AS last FROM login_codes WHERE email = ?", (email,)
     ).fetchone()["last"]
-    return 0 if last is None else max(0, EMAIL_INTERVAL - (ts - last))
+    if last is not None and ts - last < EMAIL_INTERVAL:
+        yield "email_interval", EMAIL_INTERVAL - (ts - last)
+    recent = conn.execute(
+        "SELECT created_at FROM login_codes WHERE email = ? AND created_at > ? ORDER BY created_at",
+        (email, since),
+    ).fetchall()
+    if len(recent) >= EMAIL_PER_HOUR:
+        yield "email_hour", recent[0]["created_at"] + HOUR - ts
+    if ip is None:
+        return
+    recent = conn.execute(
+        "SELECT created_at FROM login_codes WHERE ip = ? AND created_at > ? ORDER BY created_at",
+        (ip, since),
+    ).fetchall()
+    if len(recent) >= IP_PER_HOUR:
+        yield "ip", recent[0]["created_at"] + HOUR - ts
+
+
+def seconds_until_resend(conn: sqlite3.Connection, email: str, now: int | None = None, *, ip: str | None = None) -> int:
+    """How long until issue_code would send `email` (from `ip`, when given) another code; 0 means now."""
+    ts = db.now() if now is None else now
+    return max((wait for _, wait in _limits(conn, email, ip, ts)), default=0)
 
 
 def issue_code(conn: sqlite3.Connection, secret: str, email: str, ip: str, now: int | None = None) -> str:
     ts = db.now() if now is None else now
-    since = ts - HOUR
     code = f"{secrets.randbelow(1_000_000):06d}"
     # The limit checks and the insert share one BEGIN IMMEDIATE transaction. SQLite then admits one
     # writer at a time, so concurrent requests (one connection each) cannot all pass the checks
     # before any of them inserts. RateLimited raised in here rolls the transaction back untouched.
     with db.transaction(conn):
-        wait = seconds_until_resend(conn, email, ts)
-        if wait:
-            raise RateLimited("email_interval", wait)
-        recent = conn.execute(
-            "SELECT created_at FROM login_codes WHERE email = ? AND created_at > ? ORDER BY created_at",
-            (email, since),
-        ).fetchall()
-        if len(recent) >= EMAIL_PER_HOUR:
-            raise RateLimited("email_hour", recent[0]["created_at"] + HOUR - ts)
-        recent = conn.execute(
-            "SELECT created_at FROM login_codes WHERE ip = ? AND created_at > ? ORDER BY created_at",
-            (ip, since),
-        ).fetchall()
-        if len(recent) >= IP_PER_HOUR:
-            raise RateLimited("ip", recent[0]["created_at"] + HOUR - ts)
+        for scope, wait in _limits(conn, email, ip, ts):
+            raise RateLimited(scope, wait)
         conn.execute("DELETE FROM login_codes WHERE created_at < ?", (ts - 86400,))
         conn.execute(
             "UPDATE login_codes SET consumed_at = ? WHERE email = ? AND consumed_at IS NULL", (ts, email)

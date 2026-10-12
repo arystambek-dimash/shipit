@@ -73,7 +73,7 @@ def code_page(
         return redirect("/login")
     return render(
         request, "code.html", email=email, next=safe_next(next_url), error=None,
-        resend_wait=email_code.seconds_until_resend(conn, email),
+        resend_wait=email_code.seconds_until_resend(conn, email, ip=client_ip(request)),
     )
 
 
@@ -97,8 +97,13 @@ def email_start(
         code = email_code.issue_code(conn, settings.secret_key, address, client_ip(request))
     except email_code.RateLimited as exc:
         if exc.scope != "email_interval":
-            error = i18n.t(lang, "error.rate_limited", s=exc.retry_after)
-            return render(request, "login.html", status=429, page_url=page, next=target, email=email, error=error)
+            error = i18n.t(lang, "error.rate_limited", wait=i18n.format_wait(lang, exc.retry_after))
+            response = render(
+                request, "login.html", status=429, page_url=page, next=target, email=email, error=error,
+                wait=exc.retry_after,
+            )
+            response.headers["Retry-After"] = str(exc.retry_after)
+            return response
     else:
         background.add_task(send_code, request.app.state.mailer, address, code, lang, settings.app_domain)
     response = redirect(f"/login/code?next={quote(target)}")
@@ -125,7 +130,7 @@ def email_verify(
         return render(
             request, "code.html", status=400, page_url=f"/login/code?next={quote(target)}", email=email, next=target,
             error=i18n.t(request.state.lang, "error.code_invalid"),
-            resend_wait=email_code.seconds_until_resend(conn, email),
+            resend_wait=email_code.seconds_until_resend(conn, email, ip=client_ip(request)),
         )
     response = redirect(target)
     response.delete_cookie(PENDING_COOKIE, path="/")
@@ -148,11 +153,13 @@ def email_resend(
     try:
         code = email_code.issue_code(conn, settings.secret_key, email, client_ip(request))
     except email_code.RateLimited as exc:
-        return render(
+        response = render(
             request, "code.html", status=429, page_url=f"/login/code?next={quote(target)}", email=email, next=target,
-            error=i18n.t(lang, "error.rate_limited", s=exc.retry_after),
-            resend_wait=email_code.seconds_until_resend(conn, email),
+            error=i18n.t(lang, "error.rate_limited", wait=i18n.format_wait(lang, exc.retry_after)),
+            resend_wait=max(exc.retry_after, email_code.seconds_until_resend(conn, email, ip=client_ip(request))),
         )
+        response.headers["Retry-After"] = str(exc.retry_after)
+        return response
     background.add_task(send_code, request.app.state.mailer, email, code, lang, settings.app_domain)
     return redirect(f"/login/code?next={quote(target)}", settings=settings, flash=("ok", i18n.t(lang, "code.sent")))
 

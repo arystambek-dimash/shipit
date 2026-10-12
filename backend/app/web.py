@@ -94,6 +94,8 @@ def js_strings(lang: str, settings: Settings) -> dict[str, object]:
         "maxBytes": settings.max_upload_mb * MB,
         "maxFiles": settings.max_files,
         "units": [t("unit.b"), t("unit.kb"), t("unit.mb"), t("unit.gb")],
+        "waitSec": t("wait.sec"),
+        "waitMin": t("wait.min"),
         "dec": "." if lang == "en" else ",",
     }
 
@@ -133,6 +135,7 @@ def render(
         "lang_urls": lang_links(request, page_url),
         "t": partial(i18n.t, lang),
         "size": partial(i18n.format_size, lang),
+        "duration": partial(i18n.format_wait, lang),
         "ago": lambda ts: i18n.format_ago(lang, max(0, db.now() - int(ts or 0))),
         "settings": settings,
         "asset_v": ASSET_VERSION,

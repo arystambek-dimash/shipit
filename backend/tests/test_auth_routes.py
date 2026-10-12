@@ -200,3 +200,27 @@ def test_language_links_never_leave_the_site(client):
         page = client.get(APP + raw)
         assert page.status_code == 404
         assert [url for url, _ in lang_hrefs(page)] == [f"{path}?lang={code}" for code in ("en", "ru", "kk")], raw
+
+
+def test_hourly_limit_counts_down_on_the_code_and_login_pages(client, mailer, monkeypatch):
+    now = [1_000_000]
+    monkeypatch.setattr("app.db.now", lambda: now[0])
+    client.post("/auth/email/start", data={"email": "a@b.co"}, follow_redirects=False)
+    for _ in range(4):  # five codes in all: the hourly limit for one address
+        now[0] += 61
+        assert client.post("/auth/email/resend", data={"next": "/"}, follow_redirects=False).status_code == 303
+    now[0] += 61
+    wait = 1_000_000 + 3600 - now[0]  # until the first code is an hour old
+    resend = client.post("/auth/email/resend", data={"next": "/"})
+    assert resend.status_code == 429 and resend.headers["retry-after"] == str(wait)
+    assert "Too many attempts. Try again in 55 min." in resend.text
+    assert f'data-wait="{wait}"' in resend.text and "disabled>New code in 55 min</button>" in resend.text
+    code_page = client.get("/login/code")
+    assert f'data-wait="{wait}"' in code_page.text and "disabled>New code in 55 min</button>" in code_page.text
+    login = client.post("/auth/email/start", data={"email": "a@b.co", "next": "/"})
+    assert login.status_code == 429 and login.headers["retry-after"] == str(wait)
+    assert f'data-wait="{wait}"' in login.text and "disabled>Send code in 55 min</button>" in login.text
+    assert 'data-wait-label="Send code in {wait}"' in login.text
+    now[0] += wait
+    assert "data-wait" not in client.get("/login").text
+    assert client.post("/auth/email/resend", data={"next": "/"}, follow_redirects=False).status_code == 303

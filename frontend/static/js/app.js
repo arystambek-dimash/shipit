@@ -41,10 +41,12 @@ for (const input of document.querySelectorAll("[data-confirm]")) {
   sync();
 }
 
-/* Resend countdown: <button data-wait="seconds" data-label="…" data-wait-label="… {s} …"> */
+/* Rate-limit countdown: <button data-wait="seconds" data-label="…" data-wait-label="… {wait} …">.
+   Seconds under a minute, else whole minutes rounded up, as i18n.format_wait does on the server. */
 {
   const button = $("[data-wait]");
   let left = Number(button?.dataset.wait || 0);
+  const wait = (s) => (s < 60 ? fmt(S.waitSec, { n: s }) : fmt(S.waitMin, { n: Math.ceil(s / 60) }));
   const tick = () => {
     if (left <= 0) {
       button.disabled = false;
@@ -52,7 +54,7 @@ for (const input of document.querySelectorAll("[data-confirm]")) {
       return;
     }
     button.disabled = true;
-    button.textContent = fmt(button.dataset.waitLabel, { s: left });
+    button.textContent = fmt(button.dataset.waitLabel, { wait: wait(left) });
     left -= 1;
     setTimeout(tick, 1000);
   };

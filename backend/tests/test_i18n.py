@@ -60,3 +60,12 @@ def test_format_ago():
     assert i18n.format_ago("ru", 125) == "2 мин назад"
     assert i18n.format_ago("kk", 7200) == "2 сағ бұрын"
     assert i18n.format_ago("en", 3 * 86400) == "3 d ago"
+
+
+@pytest.mark.parametrize(
+    "lang,seconds,expected",
+    [("en", 1, "1 s"), ("en", 59, "59 s"), ("en", 60, "1 min"), ("en", 61, "2 min"), ("en", 3295, "55 min"),
+     ("ru", 30, "30 с"), ("ru", 600, "10 мин"), ("kk", 45, "45 с"), ("kk", 3600, "60 мин")],
+)
+def test_format_wait(lang, seconds, expected):
+    assert i18n.format_wait(lang, seconds) == expected

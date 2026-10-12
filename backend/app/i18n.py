@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from functools import lru_cache
 
 from .config import FRONTEND_DIR
@@ -56,3 +57,10 @@ def format_ago(lang: str, seconds: int) -> str:
     if seconds < 86400:
         return t(lang, "time.hour", n=seconds // 3600)
     return t(lang, "time.day", n=seconds // 86400)
+
+
+def format_wait(lang: str, seconds: int) -> str:
+    """A rate-limit wait: seconds under a minute, else whole minutes rounded up (app.js formats it the same)."""
+    if seconds < 60:
+        return t(lang, "wait.sec", n=seconds)
+    return t(lang, "wait.min", n=math.ceil(seconds / 60))

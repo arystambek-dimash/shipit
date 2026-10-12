@@ -17,7 +17,11 @@
       <input class="input" id="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" required value="{{ email }}" aria-describedby="email-hint">
       <p class="hint" id="email-hint">{{ t("login.email_hint") }}</p>
     </div>
+    {% if wait %}
+    <button class="btn btn-primary" type="submit" data-wait="{{ wait }}" data-label="{{ t('login.email_submit') }}" data-wait-label="{{ t('login.submit_in', wait='{wait}') }}" disabled>{{ t("login.submit_in", wait=duration(wait)) }}</button>
+    {% else %}
     <button class="btn btn-primary" type="submit">{{ t("login.email_submit") }}</button>
+    {% endif %}
   </form>
 </section>
 {% endblock %}

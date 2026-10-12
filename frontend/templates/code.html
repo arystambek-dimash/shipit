@@ -16,7 +16,7 @@
   <div class="auth-foot">
     <form method="post" action="/auth/email/resend">
       <input type="hidden" name="next" value="{{ next }}">
-      <button class="btn-link" type="submit" data-wait="{{ resend_wait }}" data-label="{{ t('code.resend') }}" data-wait-label="{{ t('code.resend_in', s='{s}') }}"{% if resend_wait %} disabled{% endif %}>{{ t("code.resend_in", s=resend_wait) if resend_wait else t("code.resend") }}</button>
+      <button class="btn-link" type="submit" data-wait="{{ resend_wait }}" data-label="{{ t('code.resend') }}" data-wait-label="{{ t('code.resend_in', wait='{wait}') }}"{% if resend_wait %} disabled{% endif %}>{{ t("code.resend_in", wait=duration(resend_wait)) if resend_wait else t("code.resend") }}</button>
     </form>
     <a href="/login?next={{ next|urlencode }}">{{ t("code.change_email") }}</a>
   </div>
