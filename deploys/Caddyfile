@@ -9,8 +9,15 @@
 	encode zstd gzip
 	@internal path /internal/*
 	respond @internal 404
-	request_body {
+	# Only the two upload routes take large bodies. Everything else is a small form or a Google ID
+	# token, and the app parses those bodies in memory: a 60 MB JSON body costs it hundreds of MB.
+	@upload path /deploy /sites/*/deploy
+	request_body @upload {
 		max_size 60MB
+	}
+	@not_upload not path /deploy /sites/*/deploy
+	request_body @not_upload {
+		max_size 64KB
 	}
 	reverse_proxy app:8000
 }

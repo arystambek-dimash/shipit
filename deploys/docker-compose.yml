@@ -14,6 +14,9 @@ services:
     volumes:
       - sitedata:/data
     restart: unless-stopped
+    # The host has 1.9 GB. If the app ever balloons, the kernel kills an app worker (compose restarts
+    # it) instead of Caddy, which keeps serving every deployed site from disk.
+    mem_limit: 1g
 
   caddy:
     image: caddy:2.11

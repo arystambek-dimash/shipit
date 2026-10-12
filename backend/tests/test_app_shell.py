@@ -1,5 +1,7 @@
+import os
+
 from app.devsites import resolve_site_file
-from tests.helpers import ADMIN, publish_site, sign_in
+from tests.helpers import ADMIN, publish_site, sign_in, upload_zip
 
 
 def test_unknown_page_renders_translated_404(client):
@@ -129,3 +131,25 @@ def test_deployed_sites_may_be_framed(client, app, conn):
     response = client.get(f"http://{name}.localhost:8000/")
     assert response.status_code == 200
     assert "x-frame-options" not in response.headers and "content-security-policy" not in response.headers
+
+
+def test_large_bodies_are_refused_outside_the_upload_routes(client, google):
+    # FastAPI reads and parses these bodies whole; an anonymous 60 MB JSON array cost ~400 MB per request.
+    padding = "0," * 40_000
+    body = '{"credential": "x", "next": "/", "pad": [' + padding + "0]}"
+    google_login = client.post(
+        "/auth/google", content=body, headers={"content-type": "application/json", "accept": "application/json"}
+    )
+    assert google_login.status_code == 413
+    assert google_login.json() == {"error": "Something went wrong. Try again."}
+    form = client.post("/auth/email/start", data={"email": "a@b.co", "pad": "x" * 70_000})
+    assert form.status_code == 413
+    small = client.post("/auth/google", json={"credential": "x"}, headers={"accept": "application/json"})
+    assert small.status_code == 400  # parsed and rejected by the handler, as before
+
+
+def test_uploads_may_be_larger_than_the_form_cap(client, mailer):
+    sign_in(client, mailer, ADMIN)
+    noise = os.urandom(200_000)  # incompressible, so the zip stays well over 64 KB
+    response = upload_zip(client, {"index.html": b"hi", "noise.bin": noise})
+    assert response.status_code == 201, response.text
