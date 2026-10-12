@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import db, i18n
 from .auth import sessions
@@ -53,6 +54,25 @@ class CachedStatic(StaticFiles):
         if response.status_code == 200:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
+
+
+class HeadAsGet:
+    """FastAPI GET routes do not answer HEAD (405). Run HEAD as GET and send the headers without the body."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] != "HEAD":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_without_body(message: Message) -> None:
+            if message["type"] == "http.response.body":
+                message = {"type": "http.response.body", "body": b"", "more_body": message.get("more_body", False)}
+            await send(message)
+
+        await self.app({**scope, "method": "GET"}, receive, send_without_body)
 
 
 def create_app(settings: Settings | None = None, *, mailer=None, google=None) -> FastAPI:
@@ -106,6 +126,8 @@ def create_app(settings: Settings | None = None, *, mailer=None, google=None) ->
                 )
         response.headers.update(NO_FRAMING)
         return response
+
+    app.add_middleware(HeadAsGet)  # outermost: every layer below sees a plain GET
 
     @app.exception_handler(NotSignedIn)
     async def handle_not_signed_in(request: Request, exc: NotSignedIn) -> Response:
