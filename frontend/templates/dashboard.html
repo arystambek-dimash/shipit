@@ -6,15 +6,19 @@
 <h1 class="visually-hidden">{{ t("dash.title") }}</h1>
 {{ drop_zone("/deploy", t("drop.title")) }}
 <section class="sites" aria-labelledby="sites-title">
-  <h2 id="sites-title">{{ t("dash.yours") }}</h2>
+  <div class="section-head">
+    <h2 id="sites-title">{{ t("dash.yours") }}</h2>
+    {% if sites %}<span class="count">{{ sites|length }}</span>{% endif %}
+  </div>
   {% if sites %}
   <ul class="list" role="list">
     {% for site in sites %}{% set url = settings.site_url(site.name) %}
     <li class="site-row">
       <div class="site-main">
-        <a class="site-link" href="{{ url }}" target="_blank" rel="noopener">{{ site.name }}.{{ settings.sites_domain }}</a>
-        <span class="site-meta">{{ ago(site.deployed_at or site.updated_at) }} · {{ size(site.total_bytes or 0) }}</span>
+        <a class="site-name" href="/sites/{{ site.name }}">{{ site.name }}</a>
+        <a class="site-url" href="{{ url }}" target="_blank" rel="noopener">{{ site.name }}.{{ settings.sites_domain }}</a>
       </div>
+      <span class="site-meta">{{ ago(site.deployed_at or site.updated_at) }} · {{ size(site.total_bytes or 0) }}</span>
       <div class="site-actions">
         <button class="btn btn-quiet" type="button" data-copy="{{ url }}">{{ copy_icon() }}<span>{{ t("sites.copy") }}</span></button>
         <a class="btn btn-quiet" href="/sites/{{ site.name }}">{{ t("sites.settings") }}</a>
@@ -23,7 +27,7 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="empty">{{ t("sites.empty") }}</p>
+  <p class="list empty">{{ t("sites.empty") }}</p>
   {% endif %}
 </section>
 {% endblock %}

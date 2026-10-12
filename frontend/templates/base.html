@@ -13,7 +13,7 @@
 <a class="skip" href="#main">{{ t("nav.skip") }}</a>
 <header class="top">
   <div class="wrap top-in">
-    <a class="mark" href="/">zerde<span>/</span>deploy</a>
+    <a class="mark" href="/">zerde<span class="mark-slash">/</span><span class="mark-sub">deploy</span></a>
     {% if user %}
     <nav class="top-nav" aria-label="{{ t('nav.main') }}">
       <a href="/"{% if path == "/" or path.startswith("/sites/") %} aria-current="page"{% endif %}>{{ t("nav.sites") }}</a>

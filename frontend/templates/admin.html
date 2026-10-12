@@ -39,7 +39,7 @@
     {% for site in sites %}
     <li class="site-row">
       <div class="site-main">
-        <a class="site-link" href="/sites/{{ site.name }}">{{ site.name }}</a>
+        <a class="site-name" href="/sites/{{ site.name }}">{{ site.name }}</a>
         <span class="site-meta">{{ t("admin.owner") }}: {{ site.owner_email }} · {{ ago(site.deployed_at or site.updated_at) }} · {{ size(site.total_bytes or 0) }}</span>
       </div>
     </li>

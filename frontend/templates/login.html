@@ -1,9 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ t("login.title") }}{% endblock %}
+{% from "_icons.html" import folder_icon, arrow_icon %}
 {% block main %}
+<div class="auth-split">
+<div class="pitch">
+  <p class="pitch-title">{{ t("login.pitch") }}</p>
+  <p class="pitch-sub">{{ t("login.lead", domain=settings.sites_domain) }}</p>
+  <div class="demo" aria-hidden="true">
+    <span class="demo-file">{{ folder_icon() }}<b>my-site/</b>index.html · style.css</span>
+    {{ arrow_icon() }}
+    <span class="demo-url">{{ settings.scheme }}://my-site.{{ settings.sites_domain }}</span>
+  </div>
+</div>
 <section class="auth">
   <h1>{{ t("login.title") }}</h1>
-  <p class="lead">{{ t("login.lead", domain=settings.sites_domain) }}</p>
+  {% if settings.google_client_id %}<p class="lead">{{ t("login.lead_short") }}</p>{% endif %}
   {% if error %}<p class="notice notice-error" role="alert">{{ error }}</p>{% endif %}
   {% if settings.google_client_id %}
   <div id="g-btn" class="g-slot" data-client-id="{{ settings.google_client_id }}" data-next="{{ next }}" data-locale="{{ lang }}"></div>
@@ -24,6 +35,7 @@
     {% endif %}
   </form>
 </section>
+</div>
 {% endblock %}
 {% block scripts %}
 {% if settings.google_client_id %}<script src="https://accounts.google.com/gsi/client" async></script>{% endif %}

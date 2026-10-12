@@ -103,5 +103,8 @@
   "time.now": "just now",
   "time.min": "{n} min ago",
   "time.hour": "{n} h ago",
-  "time.day": "{n} d ago"
+  "time.day": "{n} d ago",
+  "login.pitch": "Drop a folder. Get a link.",
+  "login.lead_short": "Use Google or a one-time code sent to your email.",
+  "sites.open": "Open"
 }

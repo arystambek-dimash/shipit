@@ -1,18 +1,21 @@
 {% extends "base.html" %}
 {% from "_drop.html" import drop_zone with context %}
-{% from "_icons.html" import copy_icon %}
+{% from "_icons.html" import copy_icon, external_icon %}
 {% block title %}{{ site.name }}{% endblock %}
 {% block main %}
 <p class="crumb"><a href="/">← {{ t("site.back") }}</a></p>
 <div class="page-head">
-  <h1 class="mono">{{ site.name }}</h1>
-  <div class="link-line">
-    <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
-    <button class="btn btn-quiet" type="button" data-copy="{{ url }}">{{ copy_icon() }}<span>{{ t("sites.copy") }}</span></button>
+  <div>
+    <h1>{{ site.name }}</h1>
+    <a class="site-url-line" href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
+  </div>
+  <div class="head-actions">
+    <button class="btn btn-secondary" type="button" data-copy="{{ url }}">{{ copy_icon() }}<span>{{ t("sites.copy") }}</span></button>
+    <a class="btn btn-primary" href="{{ url }}" target="_blank" rel="noopener">{{ t("sites.open") }}{{ external_icon() }}</a>
   </div>
 </div>
 
-{{ drop_zone("/sites/" ~ site.name ~ "/deploy", t("drop.redeploy_title")) }}
+{{ drop_zone("/sites/" ~ site.name ~ "/deploy", t("drop.redeploy_title"), compact=true) }}
 
 <section class="panel" aria-labelledby="versions-title">
   <h2 id="versions-title">{{ t("site.history") }}</h2>

@@ -1,6 +1,6 @@
 {% from "_icons.html" import upload_icon %}
-{% macro drop_zone(action, title) %}
-<form class="drop" id="drop" method="post" action="{{ action }}" enctype="multipart/form-data">
+{% macro drop_zone(action, title, compact=false) %}
+<form class="drop{{ ' drop-compact' if compact }}" id="drop" method="post" action="{{ action }}" enctype="multipart/form-data">
   <div class="drop-idle">
     {{ upload_icon() }}
     <p class="drop-title">{{ title }}</p>

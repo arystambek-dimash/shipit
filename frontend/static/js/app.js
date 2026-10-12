@@ -296,5 +296,10 @@ for (const input of document.querySelectorAll("[data-confirm]")) {
       request?.abort();
       show(false);
     });
+    // The whole idle zone is a click target: a click on its empty area opens the file picker.
+    form.addEventListener("click", (event) => {
+      if (!busy.hidden || event.target.closest("label, button, a, input")) return;
+      form.querySelector("input[type=file]").click();
+    });
   }
 }
