@@ -118,6 +118,7 @@ for (const input of document.querySelectorAll("[data-confirm]")) {
     const bar = $(".bar > span", form);
     const error = $(".drop-error", form);
     let request = null;
+    let round = 0; // Cancel and each new pick bump it, so a folder still being read is not uploaded
 
     const show = (isBusy) => { idle.hidden = isBusy; busy.hidden = !isBusy; };
     const fail = (message) => {
@@ -197,14 +198,16 @@ for (const input of document.querySelectorAll("[data-confirm]")) {
     form.addEventListener("drop", async (event) => {
       event.preventDefault();
       form.classList.remove("is-over");
+      const mine = ++round;
       const pending = collect(event.dataTransfer);
       show(true);
       status.textContent = S.reading;
       bar.style.width = "0%";
       try {
-        upload(await pending);
+        const files = await pending;
+        if (mine === round) upload(files);
       } catch {
-        fail(S.failed);
+        if (mine === round) fail(S.failed);
       }
     });
     for (const input of form.querySelectorAll("input[type=file]")) {
@@ -213,10 +216,12 @@ for (const input of document.querySelectorAll("[data-confirm]")) {
           .map((file) => [file.webkitRelativePath || file.name, file])
           .filter(([path]) => !path.split("/").some((part) => SKIP.has(part)));
         input.value = "";
+        round += 1;
         upload(files);
       });
     }
     $(".drop-cancel", form).addEventListener("click", () => {
+      round += 1;
       request?.abort();
       show(false);
     });
