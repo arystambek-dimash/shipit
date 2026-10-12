@@ -69,3 +69,10 @@ def test_format_ago():
 )
 def test_format_wait(lang, seconds, expected):
     assert i18n.format_wait(lang, seconds) == expected
+
+
+def test_kazakh_never_needs_a_case_ending_on_a_placeholder():
+    # "кейін", "соң" and "бері" take the ablative: "5 минуттан кейін", "45 секундтан кейін". The ending depends
+    # on the number and unit filled in, so a placeholder must never stand right before them.
+    for key, text in i18n.catalog("kk").items():
+        assert not re.search(r"\}\s*(кейін|соң|бері)\b", text), key
