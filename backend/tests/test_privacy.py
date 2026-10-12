@@ -1,3 +1,4 @@
+import re
 from dataclasses import replace
 
 import pytest
@@ -34,6 +35,26 @@ def test_privacy_page_says_what_is_stored(client):
     text = client.get("/privacy").text
     for fact in ("email address", "Google account ID", "profile picture", "IP address", "session cookie", "anyone who has the link"):
         assert fact in text
+
+
+# Request logs keep the visitor's IP, and the sign-in-code row outlives a day on a quiet instance,
+# so the page must neither bound the time nor say "only" for the IP address.
+IP_CLAIMS = {
+    "en": (("server logs",), ("up to a day", "only to")),
+    "ru": (("журналах сервера",), ("не дольше суток", "только чтобы")),
+    "kk": (("сервер журналдарында",), ("бір тәулікке", "тек кіру")),
+}
+
+
+@pytest.mark.parametrize("lang", ["en", "ru", "kk"])
+def test_privacy_page_does_not_overstate_how_the_ip_address_is_kept(client, lang):
+    items = re.findall(r"<li>([^<]*)</li>", client.get(f"/privacy?lang={lang}").text)
+    (line,) = [item for item in items if "IP" in item]
+    required, forbidden = IP_CLAIMS[lang]
+    for phrase in required:
+        assert phrase in line
+    for phrase in forbidden:
+        assert phrase not in line
 
 
 def test_privacy_page_names_the_first_admin_as_the_contact(settings, mailer):

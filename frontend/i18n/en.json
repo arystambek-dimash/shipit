@@ -112,7 +112,7 @@
   "privacy.store_email": "Your email address.",
   "privacy.store_google": "If you sign in with Google: your Google account ID, name and profile picture URL.",
   "privacy.store_files": "The files you upload, and when and by whom each version was published.",
-  "privacy.store_ip": "Your IP address for up to a day, only to limit sign-in code requests.",
+  "privacy.store_ip": "Your IP address, to limit sign-in code requests and in server logs.",
   "privacy.store_cookies": "Cookies: a session cookie that keeps you signed in, a language cookie, and short-lived cookies for the sign-in steps and one-time messages.",
   "privacy.why_h": "Why",
   "privacy.why": "To sign you in, decide who may publish, show you your sites and their history, and serve the sites you publish.",
