@@ -55,7 +55,14 @@ sudo crontab -e
 15 3 * * * /opt/zerde-deploy/deploys/backup.sh >> /var/log/zerde-backup.log 2>&1
 ```
 
-Backups land in the `sitedata` volume under `/data/backups` (14 days). Copy them off the server regularly if the sites matter.
+`backup.sh` copies only the database (`app.db`: users, allowlist, sites and their deploy history) to `/data/backups` (14 days). That folder is inside the same `sitedata` volume on the same disk, and the deployed files themselves (`/data/sites`) are not copied at all, so it does not survive losing the server. To keep a real copy, pack the whole volume (sites + database backups) into `~/sitedata.tgz` on the server and fetch it:
+
+```bash
+cd /opt/zerde-deploy/deploys && ./backup.sh && docker run --rm -v zerde-deploy_sitedata:/data:ro -v "$HOME":/out alpine tar czf /out/sitedata.tgz -C /data .
+scp ubuntu@212.116.232.74:sitedata.tgz .   # on your Mac; then delete ~/sitedata.tgz on the server
+```
+
+The live `app.db` in the archive may be caught mid-write; to restore, use the newest `backups/app-*.db` from it, which the command above has just written.
 
 ## 6. Everyday operations
 
