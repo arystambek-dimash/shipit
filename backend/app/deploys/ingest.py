@@ -20,6 +20,7 @@ COMPRESSIBLE = frozenset(
     {".html", ".htm", ".css", ".js", ".mjs", ".svg", ".json", ".xml", ".txt", ".map", ".webmanifest"}
 )
 PRECOMPRESS_MIN = 1024
+ZIP_UTF8_FLAG = 0x800
 _DRIVE = re.compile(r"^[A-Za-z]:")
 
 
@@ -108,6 +109,22 @@ def stage_files(items: Iterable[tuple[str, BinaryIO]], dest: Path, limits: Limit
     return _finish(dest, budget)
 
 
+def zip_entry_name(info: zipfile.ZipInfo) -> str:
+    """The entry's file name as its author's system wrote it.
+
+    Without the UTF-8 flag, zipfile decodes a name as cp437, as the format says. But macOS Finder (ditto)
+    and Info-ZIP store UTF-8 names without setting the flag, so "привет.html" would come out as
+    "╨┐╤Ç╨╕╨▓╨╡╤é.html" and every link to it would break. A name whose bytes are valid UTF-8 is read as
+    UTF-8; any other name keeps the cp437 reading. ASCII names read the same either way.
+    """
+    if info.flag_bits & ZIP_UTF8_FLAG:
+        return info.filename
+    try:
+        return info.filename.encode("cp437").decode("utf-8")
+    except UnicodeError:
+        return info.filename
+
+
 def stage_zip(source: Path | BinaryIO, dest: Path, limits: Limits) -> StagedTree:
     dest.mkdir(parents=True, exist_ok=True)
     budget = _Budget(limits, limits.max_unzipped_bytes)
@@ -122,13 +139,14 @@ def stage_zip(source: Path | BinaryIO, dest: Path, limits: Limits) -> StagedTree
         if sum(info.file_size for info in entries) > limits.max_unzipped_bytes:
             raise UploadError("too_big", mb=limits.max_unzipped_bytes // MB)
         for info in entries:
+            name = zip_entry_name(info)
             if stat.S_ISLNK(info.external_attr >> 16):
-                raise UploadError("unsafe_path", path=_short(info.filename))
+                raise UploadError("unsafe_path", path=_short(name))
             if info.flag_bits & 0x1:
                 raise UploadError("bad_zip")
             if info.file_size > MB and info.file_size > info.compress_size * limits.max_ratio:
                 raise UploadError("too_big", mb=limits.max_unzipped_bytes // MB)
-            rel = clean_path(info.filename)
+            rel = clean_path(name)
             if rel is None:
                 continue
             try:

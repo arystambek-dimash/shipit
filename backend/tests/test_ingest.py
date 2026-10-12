@@ -140,3 +140,52 @@ def test_precompress_skips_names_whose_gz_sibling_would_be_too_long(tmp_path):
     names = {p.name for p in (tmp_path / "d").iterdir()}
     assert name in names
     assert name + ".gz" not in names
+
+
+def flagless_utf8_zip(entries):
+    """A zip like macOS Finder (ditto) or Info-ZIP writes: UTF-8 names, but no UTF-8 flag (0x800).
+
+    zipfile always sets the flag for a non-ASCII name, so each name is written as an ASCII placeholder of the
+    same byte length and the bytes are swapped afterwards (names are stored twice: local and central header).
+    """
+    buf = io.BytesIO()
+    swaps = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for index, (name, data) in enumerate(entries.items()):
+            raw = name.encode("utf-8")
+            placeholder = f"~{index:03d}".ljust(len(raw), "~").encode()
+            if placeholder == raw:
+                zf.writestr(name, data)
+                continue
+            swaps.append((placeholder, raw))
+            zf.writestr(placeholder.decode(), data)
+    archive = buf.getvalue()
+    for placeholder, raw in swaps:
+        assert archive.count(placeholder) == 2
+        archive = archive.replace(placeholder, raw)
+    return io.BytesIO(archive)
+
+
+def test_zip_without_the_utf8_flag_keeps_cyrillic_names(tmp_path):
+    archive = flagless_utf8_zip({
+        "сайт/index.html": '<a href="привет.html">'.encode(),
+        "сайт/привет.html": b"hi",
+        "сайт/картинки/фото.png": b"\x89PNG",
+    })
+    with zipfile.ZipFile(archive) as zf:
+        assert all(not info.flag_bits & 0x800 for info in zf.infolist())  # really flag-less
+        assert "привет" not in " ".join(zf.namelist())  # and zipfile alone garbles the names
+    archive.seek(0)
+    stage_zip(archive, tmp_path / "d", LIMITS)
+    names = sorted(str(p.relative_to(tmp_path / "d")) for p in (tmp_path / "d").rglob("*") if p.is_file())
+    assert names == ["index.html", "картинки/фото.png", "привет.html"]
+
+
+def test_zip_names_that_are_not_utf8_keep_the_cp437_reading(tmp_path):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("index.html", b"i")
+        zf.writestr("~~~~.html", b"c")
+    archive = buf.getvalue().replace(b"~~~~.html", "café.html".encode("cp437"))  # é is 0x82: not UTF-8
+    stage_zip(io.BytesIO(archive), tmp_path / "d", LIMITS)
+    assert (tmp_path / "d" / "café.html").read_bytes() == b"c"
