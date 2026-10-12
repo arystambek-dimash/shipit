@@ -85,17 +85,20 @@ def publish(
     conn: sqlite3.Connection,
     store: SiteStore,
     *,
-    site_name: str | None,
+    site: Mapping[str, Any] | None,
     user_id: int,
     staged: StagedTree,
     now: int | None = None,
 ) -> tuple[str, int]:
+    """Put `staged` live as a new deploy of `site`, or of a new site when it is None.
+
+    `site` is the row the caller authorised, and the deploy goes to that row or nowhere: the site is not
+    looked up by name again, so a rename or delete during the upload fails with not_found even when another
+    site has taken the name since.
+    """
     ts = db.now() if now is None else now
-    if site_name is None:
-        return _publish_new(conn, store, user_id, staged, ts)
-    site = get_site(conn, site_name)
     if site is None:
-        raise SiteError("not_found")
+        return _publish_new(conn, store, user_id, staged, ts)
     with _locked_site(conn, store, site) as locked:
         return locked["name"], _deploy(conn, store, locked["name"], locked["id"], user_id, staged, ts)
 

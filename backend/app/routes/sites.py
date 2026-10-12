@@ -84,8 +84,7 @@ async def handle_upload(
         ]
         staged = await run_in_threadpool(stage_upload, pairs, staging, limits)
         name, deploy_id = await run_in_threadpool(
-            service.publish, conn, store,
-            site_name=site["name"] if site else None, user_id=user["id"], staged=staged,
+            service.publish, conn, store, site=site, user_id=user["id"], staged=staged,
         )
     except UploadError as error:
         return upload_failed(request, error, back)

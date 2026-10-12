@@ -62,5 +62,5 @@ def publish_site(app, conn, files: dict[str, bytes] | None = None) -> str:
     files = files or {"index.html": b"hello"}
     staged = stage_files([(path, io.BytesIO(data)) for path, data in files.items()], store.new_staging_dir(), Limits())
     owner = users.upsert_user(conn, ADMIN)
-    name, _ = service.publish(conn, store, site_name=None, user_id=owner["id"], staged=staged)
+    name, _ = service.publish(conn, store, site=None, user_id=owner["id"], staged=staged)
     return name
