@@ -49,10 +49,10 @@ def stage_upload(pairs: list[tuple[UploadFile, str]], dest: Path, limits: Limits
     return ingest.stage_files([(path or upload.filename or "", upload.file) for upload, path in pairs], dest, limits)
 
 
-def upload_failed(request: Request, error: UploadError, back: str) -> Response:
+def upload_failed(request: Request, error: UploadError, back: str, status: int = 400) -> Response:
     message = i18n.t(request.state.lang, f"upload.error.{error.code}", **error.params)
     if wants_json(request):
-        return JSONResponse({"error": message}, status_code=400)
+        return JSONResponse({"error": message}, status_code=status)
     return redirect(back, settings=settings_of(request), flash=("error", message))
 
 
@@ -88,6 +88,8 @@ async def handle_upload(
         )
     except UploadError as error:
         return upload_failed(request, error, back)
+    except service.SiteError:  # renamed or deleted while the upload ran: nothing was published
+        return upload_failed(request, UploadError("site_gone"), "/", status=404)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
         await form.close()
@@ -184,5 +186,8 @@ def delete_site(
     lang = request.state.lang
     if confirm.strip().lower() != site["name"]:
         return redirect(f"/sites/{name}", settings=settings, flash=("error", i18n.t(lang, "error.confirm_mismatch")))
-    service.delete(conn, request.app.state.store, site)
+    try:
+        service.delete(conn, request.app.state.store, site)
+    except service.SiteError:  # a concurrent delete or rename got there first
+        raise NotFound() from None
     return redirect("/", settings=settings, flash=("ok", i18n.t(lang, "flash.deleted")))

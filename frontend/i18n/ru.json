@@ -85,6 +85,7 @@
   "upload.error.unsafe_path": "Недопустимое имя файла: {path}",
   "upload.error.duplicate_path": "Два файла с одинаковым путём: {path}",
   "upload.error.bad_zip": "Не удаётся прочитать .zip-файл.",
+  "upload.error.site_gone": "Во время загрузки адрес сайта изменили или сайт удалили. Ничего не опубликовано.",
   "js.copied": "Скопировано",
   "js.reading": "Читаем файлы…",
   "js.uploading": "Загружено {done} из {total}",

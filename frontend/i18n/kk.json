@@ -85,6 +85,7 @@
   "upload.error.unsafe_path": "Файл атауына рұқсат жоқ: {path}",
   "upload.error.duplicate_path": "Екі файлдың жолы бірдей: {path}",
   "upload.error.bad_zip": ".zip файлын оқу мүмкін емес.",
+  "upload.error.site_gone": "Жүктеу кезінде сайттың мекенжайы өзгертілді немесе сайт жойылды. Ештеңе жарияланбады.",
   "js.copied": "Көшірілді",
   "js.reading": "Файлдар оқылуда…",
   "js.uploading": "{total} ішінен {done} жүктелді",

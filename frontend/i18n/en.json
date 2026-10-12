@@ -85,6 +85,7 @@
   "upload.error.unsafe_path": "This file name isn't allowed: {path}",
   "upload.error.duplicate_path": "Two files have the same path: {path}",
   "upload.error.bad_zip": "The .zip file can't be read.",
+  "upload.error.site_gone": "The site's address changed or the site was deleted during the upload. Nothing was published.",
   "js.copied": "Copied",
   "js.reading": "Reading files…",
   "js.uploading": "Uploading {done} of {total}",
