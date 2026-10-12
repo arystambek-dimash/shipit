@@ -106,5 +106,22 @@
   "time.day": "{n} d ago",
   "login.pitch": "Drop a folder. Get a link.",
   "login.lead_short": "Use Google or a one-time code sent to your email.",
-  "sites.open": "Open"
+  "sites.open": "Open",
+  "privacy.title": "Privacy",
+  "privacy.store_h": "What we store",
+  "privacy.store_email": "Your email address.",
+  "privacy.store_google": "If you sign in with Google: your Google account ID, name and profile picture URL.",
+  "privacy.store_files": "The files you upload, and when and by whom each version was published.",
+  "privacy.store_ip": "Your IP address for up to a day, only to limit sign-in code requests.",
+  "privacy.store_cookies": "Cookies: a session cookie that keeps you signed in, a language cookie, and short-lived cookies for the sign-in steps and one-time messages.",
+  "privacy.why_h": "Why",
+  "privacy.why": "To sign you in, decide who may publish, show you your sites and their history, and serve the sites you publish.",
+  "privacy.never_h": "What we don't do",
+  "privacy.never": "No ads. We don't sell or share your data. There are no third-party analytics or trackers. Google is used only to verify your sign-in.",
+  "privacy.public_h": "Your sites are public",
+  "privacy.public": "Anything you publish is visible to anyone who has the link.",
+  "privacy.delete_h": "Deleting",
+  "privacy.delete": "You can delete your sites at any time on the site page. Deleted sites and their files are removed from the server. To delete your account data, write to the administrator.",
+  "privacy.contact": "Contact: {email}",
+  "privacy.updated": "Last updated: 12 October 2026"
 }

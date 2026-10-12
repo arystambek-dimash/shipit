@@ -177,6 +177,13 @@ label.btn:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
 .auth-foot a { color: var(--ink-2); }
 .eyebrow { margin-bottom: var(--s2); color: var(--ink-2); }
 
+/* Reading column (privacy) */
+.prose { max-width: 68ch; margin: 0 auto; overflow-wrap: anywhere; }
+.prose h1 { margin-bottom: var(--s5); }
+.prose h2 { margin: var(--s5) 0 var(--s2); }
+.prose ul { display: grid; gap: var(--s2); padding-left: 1.25em; }
+.prose footer { display: grid; gap: var(--s1); margin-top: var(--s6); padding-top: var(--s4); border-top: 1px solid var(--line); }
+
 /* Page heads */
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s3) var(--s5); margin-bottom: var(--s5); }
 .page-head > :first-child { display: grid; gap: 6px; min-width: 0; }

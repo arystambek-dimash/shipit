@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ t("privacy.title") }}{% endblock %}
+{% block main %}
+<article class="prose">
+  <h1>{{ t("privacy.title") }}</h1>
+  <h2>{{ t("privacy.store_h") }}</h2>
+  <ul>
+    <li>{{ t("privacy.store_email") }}</li>
+    <li>{{ t("privacy.store_google") }}</li>
+    <li>{{ t("privacy.store_files") }}</li>
+    <li>{{ t("privacy.store_ip") }}</li>
+    <li>{{ t("privacy.store_cookies") }}</li>
+  </ul>
+  <h2>{{ t("privacy.why_h") }}</h2>
+  <p>{{ t("privacy.why") }}</p>
+  <h2>{{ t("privacy.never_h") }}</h2>
+  <p>{{ t("privacy.never") }}</p>
+  <h2>{{ t("privacy.public_h") }}</h2>
+  <p>{{ t("privacy.public") }}</p>
+  <h2>{{ t("privacy.delete_h") }}</h2>
+  <p>{{ t("privacy.delete") }}</p>
+  <footer>
+    {% if contact %}<p>{{ t("privacy.contact", email=contact) }}</p>{% endif %}
+    <p class="muted">{{ t("privacy.updated") }}</p>
+  </footer>
+</article>
+{% endblock %}

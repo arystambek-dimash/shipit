@@ -1,4 +1,4 @@
-"""Dashboard page."""
+"""Dashboard and privacy pages."""
 from __future__ import annotations
 
 import sqlite3
@@ -25,3 +25,9 @@ def dashboard(
     if not access.can_deploy(conn, settings_of(request), user["email"]):
         return render(request, "noaccess.html", user=user)
     return render(request, "dashboard.html", user=user, sites=service.list_sites(conn, user["id"]))
+
+
+@router.get("/privacy")
+def privacy(request: Request, user: sqlite3.Row | None = Depends(current_user)) -> Response:
+    contact = min(settings_of(request).admin_emails, default=None)
+    return render(request, "privacy.html", user=user, contact=contact)
