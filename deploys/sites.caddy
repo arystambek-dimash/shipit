@@ -1,0 +1,37 @@
+# Serve /srv/data/sites/<name>/current for <name>.<SITES_DOMAIN>. Python is never involved.
+map {host} {site} {
+	~^([a-z0-9-]+)\. "${1}"
+	default "_"
+}
+map {path} {cache_control} {
+	~\.(css|js|mjs|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp4|webm|mp3|pdf|json|wasm)$ "public, max-age=300"
+	default "public, max-age=0, must-revalidate"
+}
+root * /srv/data/sites/{site}/current
+encode zstd gzip
+header {
+	Cache-Control {cache_control}
+	X-Content-Type-Options nosniff
+	Referrer-Policy strict-origin-when-cross-origin
+	-Server
+}
+try_files {path} {path}/index.html {path}.html
+file_server {
+	precompressed gzip
+}
+handle_errors 404 {
+	@custom file /404.html
+	handle @custom {
+		rewrite * /404.html
+		file_server {
+			status 404
+		}
+	}
+	handle {
+		root * /srv/errors
+		rewrite * /site-404.html
+		file_server {
+			status 404
+		}
+	}
+}

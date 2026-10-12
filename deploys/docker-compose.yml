@@ -1,0 +1,45 @@
+name: zerde-deploy
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploys/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_DIR: /data
+      SERVE_SITES_IN_APP: "false"
+    volumes:
+      - sitedata:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10
+    depends_on:
+      - app
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites.caddy:/etc/caddy/sites.caddy:ro
+      - ../frontend/static/site-404.html:/srv/errors/site-404.html:ro
+      - sitedata:/srv/data:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+volumes:
+  sitedata:
+  caddy_data:
+  caddy_config:

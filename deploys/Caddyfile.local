@@ -1,0 +1,17 @@
+{
+	auto_https off
+	admin off
+}
+
+http://localhost {
+	@internal path /internal/*
+	respond @internal 404
+	request_body {
+		max_size 60MB
+	}
+	reverse_proxy app:8000
+}
+
+http://*.localhost {
+	import sites.caddy
+}

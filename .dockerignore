@@ -1,0 +1,10 @@
+.git
+.idea
+docs
+**/__pycache__
+**/.venv
+**/.pytest_cache
+backend/data
+backend/tests
+deploys/.env
+main.py

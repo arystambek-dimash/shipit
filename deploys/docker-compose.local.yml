@@ -1,0 +1,15 @@
+# Run the production stack locally over plain HTTP on port 8080:
+#   cd deploys && docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+services:
+  app:
+    environment:
+      APP_DOMAIN: localhost:8080
+      SITES_DOMAIN: localhost:8080
+      HTTPS: "false"
+      SECRET_KEY: local-only-secret-not-for-production
+      ADMIN_EMAILS: admin@example.com
+  caddy:
+    ports: !override
+      - "8080:80"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
