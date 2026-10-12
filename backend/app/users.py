@@ -23,7 +23,8 @@ def upsert_user(
 
     Access is decided on the stored email, so after this returns that email is the one verified now:
     - A row that already has this email wins. A Google account signing in takes over the google_sub
-      link from any other row, because the link must point at whatever the account last proved it owns.
+      link from any other row, because the link must point at whatever the account last proved it owns;
+      the row it leaves loses its sessions, since the account no longer proves that row's address.
     - Otherwise a row linked to this Google account (google_sub) gets the new email: the address
       changed at Google. Its sessions end, since they were opened under the old address.
     - Otherwise a new row is created.
@@ -40,6 +41,7 @@ def upsert_user(
             if google_sub and by_email["google_sub"] != google_sub:
                 if by_sub is not None:
                     conn.execute("UPDATE users SET google_sub = NULL WHERE id = ?", (by_sub["id"],))
+                    conn.execute("DELETE FROM sessions WHERE user_id = ?", (by_sub["id"],))
                 conn.execute("UPDATE users SET google_sub = ? WHERE id = ?", (google_sub, user_id))
         elif by_sub is not None:
             user_id = by_sub["id"]

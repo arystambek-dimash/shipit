@@ -64,11 +64,15 @@ def test_email_change_at_google_ends_the_rows_sessions(conn):
 
 def test_google_account_moves_to_the_row_that_owns_its_new_email(conn):
     old = users.upsert_user(conn, "ann@example.com", google_sub="g-1", now=100)
+    sessions.create_session(conn, old["id"], now=100)  # opened when the account proved ann@example.com
     new = users.upsert_user(conn, "ann.new@example.com", now=110)  # signed in by email code
+    sessions.create_session(conn, new["id"], now=110)
     signed_in = users.upsert_user(conn, "ann.new@example.com", google_sub="g-1", now=120)
     assert signed_in["id"] == new["id"] and signed_in["google_sub"] == "g-1"
     left = users.get_user(conn, old["id"])
     assert left["email"] == "ann@example.com" and left["google_sub"] is None
+    remaining = [row["user_id"] for row in conn.execute("SELECT user_id FROM sessions")]
+    assert remaining == [new["id"]]
 
 
 def test_the_latest_google_account_to_prove_an_email_holds_the_link(conn):
