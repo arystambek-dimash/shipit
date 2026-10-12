@@ -32,6 +32,11 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def retry_wait(request: Request, conn: sqlite3.Connection, email: str, limited: email_code.RateLimited) -> int:
+    """Seconds until a code can go to `email` from this IP: the limit that tripped is not always the longest."""
+    return max(limited.retry_after, email_code.seconds_until_resend(conn, email, ip=client_ip(request)))
+
+
 def pending_email(request: Request) -> str | None:
     raw = request.cookies.get(PENDING_COOKIE)
     return signing.unsign(raw, settings_of(request).secret_key, PENDING_TTL) if raw else None
@@ -97,12 +102,12 @@ def email_start(
         code = email_code.issue_code(conn, settings.secret_key, address, client_ip(request))
     except email_code.RateLimited as exc:
         if exc.scope != "email_interval":
-            error = i18n.t(lang, "error.rate_limited", wait=i18n.format_wait(lang, exc.retry_after))
+            wait = retry_wait(request, conn, address, exc)
+            error = i18n.t(lang, "error.rate_limited", wait=i18n.format_wait(lang, wait))
             response = render(
-                request, "login.html", status=429, page_url=page, next=target, email=email, error=error,
-                wait=exc.retry_after,
+                request, "login.html", status=429, page_url=page, next=target, email=email, error=error, wait=wait,
             )
-            response.headers["Retry-After"] = str(exc.retry_after)
+            response.headers["Retry-After"] = str(wait)
             return response
     else:
         background.add_task(send_code, request.app.state.mailer, address, code, lang, settings.app_domain)
@@ -153,12 +158,12 @@ def email_resend(
     try:
         code = email_code.issue_code(conn, settings.secret_key, email, client_ip(request))
     except email_code.RateLimited as exc:
+        wait = retry_wait(request, conn, email, exc)
         response = render(
             request, "code.html", status=429, page_url=f"/login/code?next={quote(target)}", email=email, next=target,
-            error=i18n.t(lang, "error.rate_limited", wait=i18n.format_wait(lang, exc.retry_after)),
-            resend_wait=max(exc.retry_after, email_code.seconds_until_resend(conn, email, ip=client_ip(request))),
+            error=i18n.t(lang, "error.rate_limited", wait=i18n.format_wait(lang, wait)), resend_wait=wait,
         )
-        response.headers["Retry-After"] = str(exc.retry_after)
+        response.headers["Retry-After"] = str(wait)
         return response
     background.add_task(send_code, request.app.state.mailer, email, code, lang, settings.app_domain)
     return redirect(f"/login/code?next={quote(target)}", settings=settings, flash=("ok", i18n.t(lang, "code.sent")))

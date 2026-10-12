@@ -3,7 +3,8 @@ import re
 
 import pytest
 
-from app import access
+from app import access, signing
+from app.auth import email_code
 from app.auth.google import GoogleIdentity
 from tests.helpers import ADMIN, APP, last_code, new_client, sign_in
 
@@ -224,3 +225,24 @@ def test_hourly_limit_counts_down_on_the_code_and_login_pages(client, mailer, mo
     now[0] += wait
     assert "data-wait" not in client.get("/login").text
     assert client.post("/auth/email/resend", data={"next": "/"}, follow_redirects=False).status_code == 303
+
+
+def test_a_rate_limited_sign_in_waits_for_the_longest_limit(client, conn, settings, monkeypatch):
+    # The address used up its hourly codes from another network and is free again in 10 minutes, but this
+    # IP has sent 20 codes in the last few minutes: no code can go out for 59 minutes, whichever limit trips first.
+    now = 1_000_000
+    monkeypatch.setattr("app.db.now", lambda: now)
+    for k in range(5):
+        email_code.issue_code(conn, settings.secret_key, "a@b.co", "10.0.0.1", now=now - 3000 + 61 * k)
+    for k in range(20):
+        email_code.issue_code(conn, settings.secret_key, f"u{k}@b.co", "testclient", now=now - 100)
+    wait = 3500  # until this IP's oldest code is an hour old
+    login = client.post("/auth/email/start", data={"email": "a@b.co", "next": "/"})
+    assert login.status_code == 429 and login.headers["retry-after"] == str(wait)
+    assert "Too many attempts. Try again in 59 min." in login.text
+    assert f'data-wait="{wait}"' in login.text and "disabled>Send code in 59 min</button>" in login.text
+    client.cookies.set("zd_pending", signing.sign("a@b.co", settings.secret_key))
+    resend = client.post("/auth/email/resend", data={"next": "/"})
+    assert resend.status_code == 429 and resend.headers["retry-after"] == str(wait)
+    assert "Too many attempts. Try again in 59 min." in resend.text
+    assert f'data-wait="{wait}"' in resend.text and "disabled>New code in 59 min</button>" in resend.text
