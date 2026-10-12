@@ -86,6 +86,7 @@
   "upload.error.duplicate_path": "Два файла с одинаковым путём: {path}",
   "upload.error.bad_zip": "Не удаётся прочитать .zip-файл.",
   "upload.error.site_gone": "Во время загрузки адрес сайта изменили или сайт удалили. Ничего не опубликовано.",
+  "upload.error.server_error": "Сервер не смог сохранить загрузку. Попробуйте позже.",
   "js.copied": "Скопировано",
   "js.reading": "Читаем файлы…",
   "js.uploading": "Загружено {done} из {total}",

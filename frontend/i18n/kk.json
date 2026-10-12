@@ -86,6 +86,7 @@
   "upload.error.duplicate_path": "Екі файлдың жолы бірдей: {path}",
   "upload.error.bad_zip": ".zip файлын оқу мүмкін емес.",
   "upload.error.site_gone": "Жүктеу кезінде сайттың мекенжайы өзгертілді немесе сайт жойылды. Ештеңе жарияланбады.",
+  "upload.error.server_error": "Сервер жүктемені сақтай алмады. Кейінірек қайталап көріңіз.",
   "js.copied": "Көшірілді",
   "js.reading": "Файлдар оқылуда…",
   "js.uploading": "{total} ішінен {done} жүктелді",

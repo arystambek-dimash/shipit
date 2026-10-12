@@ -1,3 +1,5 @@
+import errno
+
 from app import access
 from app.auth.mailer import ConsoleMailer
 from app.deploys import ingest
@@ -170,3 +172,20 @@ def test_a_worker_starting_mid_upload_leaves_the_upload_alone(client, mailer, se
     site = f"http://{response.json()['name']}.localhost:8000"
     for path, data in files.items():
         assert client.get(f"{site}/{path}").content == data, path
+
+
+def test_a_full_disk_is_reported_and_logged_not_blamed_on_a_file_name(client, mailer, monkeypatch, caplog):
+    sign_in(client, mailer, ADMIN)
+
+    def disk_full(*args, **kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(ingest, "open", disk_full, raising=False)
+    response = upload_zip(client, {"index.html": b"hi"})
+    assert response.status_code == 500
+    assert response.json() == {"error": "The server couldn't save the upload. Try again later."}
+    logged = [record for record in caplog.records if record.name == "zerde.deploys" and record.exc_info]
+    assert logged and logged[0].exc_info[1].errno == errno.ENOSPC
+    form = upload_zip(client, {"index.html": b"hi"}, json=False)
+    assert form.status_code == 303 and form.headers["location"] == "/"
+    assert "save the upload. Try again later." in client.get("/").text

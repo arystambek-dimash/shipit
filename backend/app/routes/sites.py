@@ -1,6 +1,7 @@
 """Upload, site page and site actions."""
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from ..deploys.ingest import Limits, StagedTree, UploadError
 from ..deps import NotFound, get_conn, require_deployer
 from ..web import redirect, render, set_flash, settings_of, wants_json
 
+log = logging.getLogger("zerde.deploys")
 router = APIRouter()
 
 
@@ -89,6 +91,9 @@ async def handle_upload(
         return upload_failed(request, error, back)
     except service.SiteError:  # renamed or deleted while the upload ran: nothing was published
         return upload_failed(request, UploadError("site_gone"), "/", status=404)
+    except OSError:  # a full disk, permissions: the operator needs the traceback, the user a plain answer
+        log.exception("could not stage or publish an upload by %s", user["email"])
+        return upload_failed(request, UploadError("server_error"), back, status=500)
     finally:
         await form.close()
     message = i18n.t(request.state.lang, "flash.deployed")

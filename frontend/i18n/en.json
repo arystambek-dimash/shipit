@@ -86,6 +86,7 @@
   "upload.error.duplicate_path": "Two files have the same path: {path}",
   "upload.error.bad_zip": "The .zip file can't be read.",
   "upload.error.site_gone": "The site's address changed or the site was deleted during the upload. Nothing was published.",
+  "upload.error.server_error": "The server couldn't save the upload. Try again later.",
   "js.copied": "Copied",
   "js.reading": "Reading files…",
   "js.uploading": "Uploading {done} of {total}",

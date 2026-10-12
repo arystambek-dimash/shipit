@@ -1,6 +1,7 @@
 """Turn an upload (files with relative paths, or a .zip) into a safe, publishable file tree."""
 from __future__ import annotations
 
+import errno
 import gzip
 import re
 import shutil
@@ -21,6 +22,9 @@ COMPRESSIBLE = frozenset(
 )
 PRECOMPRESS_MIN = 1024
 ZIP_UTF8_FLAG = 0x800
+# OS errors that mean "this file system won't take this name". Anything else (a full disk, permissions, too
+# many open files) is the server's problem, not the uploader's, and must not be blamed on a file name.
+PATH_ERRNOS = frozenset({errno.ENAMETOOLONG, errno.ENOTDIR, errno.EISDIR, errno.EINVAL, errno.EILSEQ})
 _DRIVE = re.compile(r"^[A-Za-z]:")
 
 
@@ -85,7 +89,9 @@ def _write(stream: BinaryIO, dest: Path, rel: str, budget: _Budget) -> None:
         out = open(target, "xb")
     except FileExistsError:
         raise UploadError("duplicate_path", path=_short(rel)) from None
-    except OSError:
+    except OSError as error:
+        if error.errno not in PATH_ERRNOS:
+            raise
         raise UploadError("unsafe_path", path=_short(rel)) from None
     written = 0
     with out:

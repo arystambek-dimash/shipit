@@ -1,10 +1,13 @@
+import errno
 import gzip
 import io
+import os
 import stat
 import zipfile
 
 import pytest
 
+from app.deploys import ingest
 from app.deploys.ingest import MB, Limits, UploadError, clean_path, stage_files, stage_zip
 
 LIMITS = Limits(max_total_bytes=1_000_000, max_files=10, max_file_bytes=500_000, max_unzipped_bytes=3 * MB)
@@ -213,3 +216,24 @@ def test_zip_skips_ignored_entries_before_any_limit(tmp_path):
 def test_zip_skipped_folders_still_reject_unsafe_paths(tmp_path):
     escape = zip_bytes({"index.html": b"i", "node_modules/../../evil.html": b"x"})
     assert error_code(stage_zip, escape, tmp_path / "d", LIMITS) == "unsafe_path"
+
+
+def failing_open(code):
+    def fake_open(*args, **kwargs):
+        raise OSError(code, os.strerror(code))
+
+    return fake_open
+
+
+@pytest.mark.parametrize("code", [errno.ENOSPC, errno.EACCES, errno.EROFS, errno.EMFILE, errno.EIO])
+def test_server_io_errors_are_not_blamed_on_the_file_name(tmp_path, monkeypatch, code):
+    monkeypatch.setattr(ingest, "open", failing_open(code), raising=False)
+    with pytest.raises(OSError) as info:
+        stage_files([("index.html", io.BytesIO(b"i"))], tmp_path / "d", LIMITS)
+    assert info.value.errno == code and not isinstance(info.value, UploadError)
+
+
+@pytest.mark.parametrize("code", [errno.ENAMETOOLONG, errno.EILSEQ, errno.EINVAL])
+def test_names_the_file_system_refuses_are_unsafe_paths(tmp_path, monkeypatch, code):
+    monkeypatch.setattr(ingest, "open", failing_open(code), raising=False)
+    assert error_code(stage_files, [("index.html", io.BytesIO(b"i"))], tmp_path / "d", LIMITS) == "unsafe_path"
