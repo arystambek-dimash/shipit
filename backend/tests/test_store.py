@@ -1,4 +1,8 @@
 import os
+import subprocess
+import sys
+import time
+from pathlib import Path
 
 import pytest
 
@@ -53,13 +57,52 @@ def test_rename_and_delete(store):
     assert not store.site_dir("new").exists()
 
 
-def test_cleanup_temp_and_lock(store):
+def test_cleanup_temp(store):
     leftover = store.new_staging_dir()
     (leftover / "x").write_text("x")
     store.cleanup_temp()
     assert not leftover.exists()
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+# Another process (like the second uvicorn worker) with its own SiteStore on the same directories.
+LOCK_PROBE = """
+import sys
+from pathlib import Path
+from app.deploys.store import SiteStore
+
+sites_dir, tmp_dir, name, marker = sys.argv[1:]
+store = SiteStore(Path(sites_dir), Path(tmp_dir))
+print("locking", flush=True)
+with store.lock(name):
+    Path(marker).write_text("acquired")
+"""
+
+
+def lock_probe(store, name, marker):
+    args = [sys.executable, "-c", LOCK_PROBE, str(store.sites_dir), str(store.tmp_dir), name, str(marker)]
+    probe = subprocess.Popen(args, cwd=BACKEND_DIR, stdout=subprocess.PIPE, text=True)
+    assert probe.stdout.readline().strip() == "locking"
+    return probe
+
+
+def test_lock_excludes_other_processes_until_released(store, tmp_path):
+    # With two workers, this lock alone orders publish, prune, restore, rename and delete of one site.
+    marker = tmp_path / "acquired"
     with store.lock("demo"):
-        pass
+        probe = lock_probe(store, "demo", marker)
+        time.sleep(0.5)
+        assert probe.poll() is None and not marker.exists(), "the other process got the lock we hold"
+    assert probe.wait(timeout=10) == 0  # and once released, it gets it
+    assert marker.read_text() == "acquired"
+
+
+def test_lock_is_per_site(store, tmp_path):
+    marker = tmp_path / "acquired"
+    with store.lock("demo"):
+        probe = lock_probe(store, "other-site", marker)
+        assert probe.wait(timeout=10) == 0
+    assert marker.read_text() == "acquired"
 
 
 def test_publish_replaces_a_leftover_target_with_the_same_id(store):
