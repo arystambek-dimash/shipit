@@ -5,7 +5,7 @@ import pytest
 
 from app import access
 from app.auth.google import GoogleIdentity
-from tests.helpers import ADMIN, last_code, new_client, sign_in
+from tests.helpers import ADMIN, APP, last_code, new_client, sign_in
 
 JSON = {"accept": "application/json"}
 
@@ -160,3 +160,43 @@ def test_google_email_change_is_checked_against_the_new_address(client, google, 
     sign_in(successor, mailer, "alice@company.example")
     assert "No access yet" not in successor.get("/").text
     assert "No access yet" in client.get("/").text
+
+
+def lang_hrefs(page):
+    return re.findall(r'<a href="([^"]*)" hreflang="(\w+)"', page.text)
+
+
+def test_language_links_keep_the_return_path(client):
+    page = client.get("/login?next=/sites/x&lang=kk")
+    assert lang_hrefs(page) == [
+        ("/login?next=%2Fsites%2Fx&amp;lang=en", "en"),
+        ("/login?next=%2Fsites%2Fx&amp;lang=ru", "ru"),
+        ("/login?next=%2Fsites%2Fx&amp;lang=kk", "kk"),
+    ]
+    switched = client.get("/login?next=%2Fsites%2Fx&lang=ru")
+    assert '<html lang="ru">' in switched.text and 'data-next="/sites/x"' in switched.text
+
+
+def test_language_links_on_pages_answering_a_post_point_at_the_get_page(client, mailer):
+    # These pages are rendered at POST-only URLs; a link relative to them used to end in 405 "not found".
+    bad_email = client.post("/auth/email/start", data={"email": "nope", "next": "/sites/x"})
+    assert bad_email.status_code == 400
+    assert ("/login?next=%2Fsites%2Fx&amp;lang=ru", "ru") in lang_hrefs(bad_email)
+    client.post("/auth/email/start", data={"email": "a@b.co", "next": "/sites/x"}, follow_redirects=False)
+    wrong_code = client.post("/auth/email/verify", data={"code": "000000", "next": "/sites/x"})
+    assert wrong_code.status_code == 400
+    href = dict((lang, url) for url, lang in lang_hrefs(wrong_code))["kk"]
+    assert href == "/login/code?next=%2Fsites%2Fx&amp;lang=kk"
+    switched = client.get(href.replace("&amp;", "&"))
+    assert switched.status_code == 200 and '<html lang="kk">' in switched.text
+    assert 'name="next" value="/sites/x"' in switched.text and "a@b.co" in switched.text
+    assert 'href="?lang=' not in wrong_code.text
+
+
+def test_language_links_never_leave_the_site(client):
+    # The links are built from the request path; "//evil.test/x" must not become a protocol-relative URL.
+    cases = [("//evil.test/x", "/evil.test/x"), ("/%2F/evil.test/x", "/evil.test/x"), ("/\\evil.test", "/%5Cevil.test")]
+    for raw, path in cases:
+        page = client.get(APP + raw)
+        assert page.status_code == 404
+        assert [url for url, _ in lang_hrefs(page)] == [f"{path}?lang={code}" for code in ("en", "ru", "kk")], raw

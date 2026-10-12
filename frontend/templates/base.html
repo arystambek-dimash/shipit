@@ -22,7 +22,7 @@
     {% endif %}
     <div class="top-end">
       <nav class="langs" aria-label="{{ t('lang.label') }}">
-        {%- for code in langs %}<a href="?lang={{ code }}" hreflang="{{ code }}" lang="{{ code }}"{% if code == lang %} aria-current="true"{% endif %}>{{ lang_labels[code] }}</a>{% endfor -%}
+        {%- for code in langs %}<a href="{{ lang_urls[code] }}" hreflang="{{ code }}" lang="{{ code }}"{% if code == lang %} aria-current="true"{% endif %}>{{ lang_labels[code] }}</a>{% endfor -%}
       </nav>
       {% if user %}
       <details class="menu">

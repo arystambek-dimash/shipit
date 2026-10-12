@@ -89,14 +89,16 @@ def email_start(
     lang = request.state.lang
     target = safe_next(next_url)
     address = access.normalize_email(email)
+    page = f"/login?next={quote(target)}"
     if address is None:
-        return render(request, "login.html", status=400, next=target, email=email, error=i18n.t(lang, "error.email_invalid"))
+        error = i18n.t(lang, "error.email_invalid")
+        return render(request, "login.html", status=400, page_url=page, next=target, email=email, error=error)
     try:
         code = email_code.issue_code(conn, settings.secret_key, address, client_ip(request))
     except email_code.RateLimited as exc:
         if exc.scope != "email_interval":
             error = i18n.t(lang, "error.rate_limited", s=exc.retry_after)
-            return render(request, "login.html", status=429, next=target, email=email, error=error)
+            return render(request, "login.html", status=429, page_url=page, next=target, email=email, error=error)
     else:
         background.add_task(send_code, request.app.state.mailer, address, code, lang, settings.app_domain)
     response = redirect(f"/login/code?next={quote(target)}")
@@ -121,7 +123,7 @@ def email_verify(
         return redirect("/login")
     if not email_code.verify_code(conn, settings.secret_key, email, code):
         return render(
-            request, "code.html", status=400, email=email, next=target,
+            request, "code.html", status=400, page_url=f"/login/code?next={quote(target)}", email=email, next=target,
             error=i18n.t(request.state.lang, "error.code_invalid"),
             resend_wait=email_code.seconds_until_resend(conn, email),
         )
@@ -147,7 +149,7 @@ def email_resend(
         code = email_code.issue_code(conn, settings.secret_key, email, client_ip(request))
     except email_code.RateLimited as exc:
         return render(
-            request, "code.html", status=429, email=email, next=target,
+            request, "code.html", status=429, page_url=f"/login/code?next={quote(target)}", email=email, next=target,
             error=i18n.t(lang, "error.rate_limited", s=exc.retry_after),
             resend_wait=email_code.seconds_until_resend(conn, email),
         )

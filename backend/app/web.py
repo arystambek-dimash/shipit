@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from functools import partial
+from urllib.parse import parse_qsl, quote, urlencode
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -97,7 +98,31 @@ def js_strings(lang: str, settings: Settings) -> dict[str, object]:
     }
 
 
-def render(request: Request, template: str, *, status: int = 200, user=None, **context: object) -> HTMLResponse:
+def lang_links(request: Request, page_url: str | None) -> dict[str, str]:
+    """For each UI language, the URL of this page in that language, keeping its `next` return path.
+
+    A page rendered in answer to a POST (a wrong code, a rate limit) passes `page_url`, the GET page it
+    shows: a link relative to the POST URL would request a POST-only path. Other non-GET responses (error
+    pages) fall back to the dashboard. `next` is the only query parameter any page reads.
+    """
+    if page_url is None:
+        page_url = f"{request.url.path}?{request.url.query}" if request.method == "GET" else "/"
+    path, _, query = page_url.partition("?")
+    path = quote("/" + path.lstrip("/"))  # never "//host", which would leave the site
+    targets = [value for key, value in parse_qsl(query, keep_blank_values=True) if key == "next"]
+    params = [("next", safe_next(targets[-1]))] if targets else []
+    return {code: f"{path}?{urlencode([*params, ('lang', code)])}" for code in i18n.LANGS}
+
+
+def render(
+    request: Request,
+    template: str,
+    *,
+    status: int = 200,
+    user=None,
+    page_url: str | None = None,
+    **context: object,
+) -> HTMLResponse:
     settings = settings_of(request)
     lang = getattr(request.state, "lang", i18n.DEFAULT_LANG)
     flash = pop_flash(request)
@@ -105,6 +130,7 @@ def render(request: Request, template: str, *, status: int = 200, user=None, **c
         "lang": lang,
         "langs": i18n.LANGS,
         "lang_labels": i18n.LANG_LABELS,
+        "lang_urls": lang_links(request, page_url),
         "t": partial(i18n.t, lang),
         "size": partial(i18n.format_size, lang),
         "ago": lambda ts: i18n.format_ago(lang, max(0, db.now() - int(ts or 0))),
