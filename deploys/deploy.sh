@@ -40,6 +40,28 @@ ssh "$HOST" "bash -s -- $(printf '%q' "$DIR")" <<'REMOTE'
     exit 1
   fi
 
+  # Caddy reads its configuration once, at start, through single-file bind mounts. rsync replaces a changed
+  # file with a new one while the running container keeps the old one, and `up` does not recreate Caddy for
+  # a changed file, so a new Caddyfile, sites.caddy or 404 page would never take effect. Compare what the
+  # container sees with the files on disk; on any difference validate the new configuration in a throwaway
+  # container, then recreate Caddy (certificates live in the caddy_data volume, open connections drop once).
+  caddy_stale() {
+    local pair
+    for pair in Caddyfile:/etc/caddy/Caddyfile sites.caddy:/etc/caddy/sites.caddy \
+      ../frontend/static/site-404.html:/srv/errors/site-404.html; do
+      docker compose exec -T caddy cat "${pair#*:}" </dev/null 2>/dev/null | cmp -s - "${pair%%:*}" || return 0
+    done
+    return 1
+  }
+  if caddy_stale; then
+    echo "Caddy configuration changed: validating it, then recreating the caddy container"
+    if ! docker compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null; then
+      echo "FAIL: the new Caddy configuration is invalid; the running Caddy keeps the old one" >&2
+      exit 1
+    fi
+    docker compose up -d --no-deps --force-recreate caddy
+  fi
+
   url="$(docker compose exec -T app python -c 'from app.config import load_settings; print(load_settings().app_origin)')/healthz"
   echo "Smoke check: $url answers through Caddy"
   if ! retry 20 3 curl -fs -o /dev/null --max-time 10 "$url"; then

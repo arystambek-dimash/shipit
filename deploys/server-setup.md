@@ -59,7 +59,7 @@ Backups land in the `sitedata` volume under `/data/backups` (14 days). Copy them
 
 ## 6. Everyday operations
 
-- Update: run `deploy.sh` again.
+- Update: run `deploy.sh` again. It rebuilds the app, and when the `Caddyfile`, `sites.caddy` or the sites' 404 page changed it validates the new Caddy configuration and recreates the caddy container (certificates are kept; open connections drop once). An invalid configuration stops the script and leaves the running Caddy as it was.
 - Logs: `cd /opt/zerde-deploy/deploys && docker compose logs -f app caddy`.
 - Add an admin: edit `ADMIN_EMAILS` in `.env`, then `docker compose up -d`.
 - Without SMTP configured, sign-in codes appear in `docker compose logs app`.
