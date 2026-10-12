@@ -44,6 +44,7 @@
 {% if flash %}<p class="notice {{ 'notice-error' if flash.kind == 'error' else 'notice-ok' }}" role="{{ 'alert' if flash.kind == 'error' else 'status' }}">{{ flash.text }}</p>{% endif %}
 {% block main %}{% endblock %}
 </main>
+<p id="zd-live" aria-live="polite" class="visually-hidden"></p>
 <script type="application/json" id="zd-strings">{{ js_strings|tojson }}</script>
 {% block scripts %}<script src="/static/js/app.js?v={{ asset_v }}" defer></script>{% endblock %}
 </body>

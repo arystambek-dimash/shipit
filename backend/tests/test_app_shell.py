@@ -153,3 +153,11 @@ def test_uploads_may_be_larger_than_the_form_cap(client, mailer):
     noise = os.urandom(200_000)  # incompressible, so the zip stays well over 64 KB
     response = upload_zip(client, {"index.html": b"hi", "noise.bin": noise})
     assert response.status_code == 201, response.text
+
+
+def test_one_polite_live_region_speaks_for_the_page(client, mailer):
+    # Upload progress and "Copied" are announced through it, so the drop zone's status line must not be a
+    # live region of its own: that one read out every progress event.
+    sign_in(client, mailer, ADMIN)
+    page = client.get("/").text
+    assert page.count("aria-live") == 1 and 'id="zd-live" aria-live="polite"' in page
