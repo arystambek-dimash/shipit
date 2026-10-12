@@ -1,4 +1,7 @@
+import asyncio
 import errno
+import shutil
+from pathlib import Path
 
 from app import access
 from app.auth.mailer import ConsoleMailer
@@ -189,3 +192,24 @@ def test_a_full_disk_is_reported_and_logged_not_blamed_on_a_file_name(client, ma
     form = upload_zip(client, {"index.html": b"hi"}, json=False)
     assert form.status_code == 303 and form.headers["location"] == "/"
     assert "save the upload. Try again later." in client.get("/").text
+
+
+def test_a_failed_upload_is_cleaned_up_off_the_event_loop(client, mailer, settings, monkeypatch):
+    # Removing a staged tree of up to 2000 files on the event loop would stall every other request meanwhile.
+    sign_in(client, mailer, ADMIN)
+    real_rmtree, removals = shutil.rmtree, []
+
+    def rmtree(path, *args, **kwargs):
+        try:
+            asyncio.get_running_loop()
+            removals.append((path, "event loop"))
+        except RuntimeError:
+            removals.append((path, "worker thread"))
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", rmtree)
+    response = upload_zip(client, {"about.html": b"about", "contact.html": b"contact"})
+    assert response.status_code == 400
+    staged = [where for path, where in removals if settings.tmp_dir in Path(path).parents]
+    assert staged == ["worker thread"]
+    assert list(settings.tmp_dir.iterdir()) == []

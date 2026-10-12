@@ -16,6 +16,7 @@ from .. import access, i18n
 from ..config import MB, Settings
 from ..deploys import ingest, service
 from ..deploys.ingest import Limits, StagedTree, UploadError
+from ..deploys.store import SiteStore
 from ..deps import NotFound, get_conn, require_deployer
 from ..web import redirect, render, set_flash, settings_of, wants_json
 
@@ -50,6 +51,16 @@ def stage_upload(pairs: list[tuple[UploadFile, str]], dest: Path, limits: Limits
     return ingest.stage_files([(path or upload.filename or "", upload.file) for upload, path in pairs], dest, limits)
 
 
+def stage_and_publish(
+    store: SiteStore, conn: sqlite3.Connection, pairs: list[tuple[UploadFile, str]], limits: Limits,
+    site: sqlite3.Row | None, user_id: int,
+) -> tuple[str, int]:
+    """Runs in a worker thread: staging, publishing and removing a failed upload's staged tree all hit the disk."""
+    with store.staging() as staging:
+        staged = stage_upload(pairs, staging, limits)
+        return service.publish(conn, store, site=site, user_id=user_id, staged=staged)
+
+
 def upload_failed(request: Request, error: UploadError, back: str, status: int = 400) -> Response:
     message = i18n.t(request.state.lang, f"upload.error.{error.code}", **error.params)
     if wants_json(request):
@@ -75,18 +86,14 @@ async def handle_upload(
     except StarletteHTTPException:
         return upload_failed(request, UploadError("too_many_files", n=limits.max_files), back)
     try:
-        with store.staging() as staging:
-            uploads = form.getlist("files")
-            paths = [str(path) for path in form.getlist("paths")]
-            pairs = [
-                (upload, paths[index] if index < len(paths) else "")
-                for index, upload in enumerate(uploads)
-                if isinstance(upload, UploadFile) and upload.filename
-            ]
-            staged = await run_in_threadpool(stage_upload, pairs, staging, limits)
-            name, deploy_id = await run_in_threadpool(
-                service.publish, conn, store, site=site, user_id=user["id"], staged=staged,
-            )
+        uploads = form.getlist("files")
+        paths = [str(path) for path in form.getlist("paths")]
+        pairs = [
+            (upload, paths[index] if index < len(paths) else "")
+            for index, upload in enumerate(uploads)
+            if isinstance(upload, UploadFile) and upload.filename
+        ]
+        name, deploy_id = await run_in_threadpool(stage_and_publish, store, conn, pairs, limits, site, user["id"])
     except UploadError as error:
         return upload_failed(request, error, back)
     except service.SiteError:  # renamed or deleted while the upload ran: nothing was published
