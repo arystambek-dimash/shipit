@@ -189,3 +189,27 @@ def test_zip_names_that_are_not_utf8_keep_the_cp437_reading(tmp_path):
     archive = buf.getvalue().replace(b"~~~~.html", "café.html".encode("cp437"))  # é is 0x82: not UTF-8
     stage_zip(io.BytesIO(archive), tmp_path / "d", LIMITS)
     assert (tmp_path / "d" / "café.html").read_bytes() == b"c"
+
+
+def test_zip_skips_ignored_entries_before_any_limit(tmp_path):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("index.html", b"i")
+        # Archive Utility stores node_modules/.bin/* as symlink entries; a skipped symlink is no threat.
+        link = zipfile.ZipInfo("node_modules/.bin/vite")
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        zf.writestr(link, "../vite/bin/vite.js")
+        for i in range(LIMITS.max_files + 2):  # more skipped entries than the file limit
+            zf.writestr(f".git/objects/{i:02d}", b"x")
+            zf.writestr(f"__MACOSX/._f{i}.html", b"x")
+        zf.writestr(".git/objects/pack/big.pack", b"\0" * (LIMITS.max_unzipped_bytes + MB))  # over size and ratio
+        zf.writestr("Thumbs.db", b"x")
+    buf.seek(0)
+    tree = stage_zip(buf, tmp_path / "d", LIMITS)
+    assert tree.file_count == 1
+    assert sorted(p.name for p in (tmp_path / "d").iterdir()) == ["index.html"]
+
+
+def test_zip_skipped_folders_still_reject_unsafe_paths(tmp_path):
+    escape = zip_bytes({"index.html": b"i", "node_modules/../../evil.html": b"x"})
+    assert error_code(stage_zip, escape, tmp_path / "d", LIMITS) == "unsafe_path"

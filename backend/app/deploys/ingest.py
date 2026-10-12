@@ -133,22 +133,27 @@ def stage_zip(source: Path | BinaryIO, dest: Path, limits: Limits) -> StagedTree
     except (zipfile.BadZipFile, OSError, ValueError):
         raise UploadError("bad_zip") from None
     with archive:
-        entries = [info for info in archive.infolist() if not info.is_dir()]
-        if len(entries) > limits.max_files:
+        # Every name is checked (clean_path raises on "..", absolute and control-character paths), but
+        # skipped entries (.git/, node_modules/, __MACOSX/, .DS_Store, Thumbs.db) are dropped before any
+        # limit applies and are never opened: the limits are about the published tree.
+        kept = []
+        for info in archive.infolist():
+            if not info.is_dir():
+                name = zip_entry_name(info)
+                rel = clean_path(name)
+                if rel is not None:
+                    kept.append((info, name, rel))
+        if len(kept) > limits.max_files:
             raise UploadError("too_many_files", n=limits.max_files)
-        if sum(info.file_size for info in entries) > limits.max_unzipped_bytes:
+        if sum(info.file_size for info, _, _ in kept) > limits.max_unzipped_bytes:
             raise UploadError("too_big", mb=limits.max_unzipped_bytes // MB)
-        for info in entries:
-            name = zip_entry_name(info)
+        for info, name, rel in kept:
             if stat.S_ISLNK(info.external_attr >> 16):
                 raise UploadError("unsafe_path", path=_short(name))
             if info.flag_bits & 0x1:
                 raise UploadError("bad_zip")
             if info.file_size > MB and info.file_size > info.compress_size * limits.max_ratio:
                 raise UploadError("too_big", mb=limits.max_unzipped_bytes // MB)
-            rel = clean_path(name)
-            if rel is None:
-                continue
             try:
                 with archive.open(info) as stream:
                     _write(stream, dest, rel, budget)
