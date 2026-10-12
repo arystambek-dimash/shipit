@@ -3,8 +3,9 @@ import re
 
 import pytest
 
+from app import access
 from app.auth.google import GoogleIdentity
-from tests.helpers import ADMIN, last_code, sign_in
+from tests.helpers import ADMIN, last_code, new_client, sign_in
 
 JSON = {"accept": "application/json"}
 
@@ -132,3 +133,30 @@ def test_logout(client, mailer):
 def test_cross_site_form_post_is_rejected(client):
     response = client.post("/auth/email/start", data={"email": "a@b.co"}, headers={"origin": "http://site.localhost:8000"})
     assert response.status_code == 403
+
+
+def test_google_email_change_is_checked_against_the_new_address(client, google, mailer, app, conn, monkeypatch):
+    now = [1_000_000]
+    monkeypatch.setattr("app.db.now", lambda: now[0])
+    # @company.example is allowlisted. Alice signs in with Google, then changes her Google account's
+    # address to one outside the allowlist: her next sign-in must be judged on the new address.
+    access.add_to_allowlist(conn, "@company.example", ADMIN)
+    google.tokens["before"] = GoogleIdentity(sub="s-1", email="alice@company.example", name="Alice", picture="")
+    google.tokens["after"] = GoogleIdentity(sub="s-1", email="alice@personal.example", name="Alice", picture="")
+    assert client.post("/auth/google", json={"credential": "before"}, headers=JSON).status_code == 200
+    assert "No access yet" not in client.get("/").text
+
+    # Whoever holds alice@company.example next signs in by email code and lands on the same row for now.
+    successor = new_client(app)
+    sign_in(successor, mailer, "alice@company.example")
+
+    assert client.post("/auth/google", json={"credential": "after"}, headers=JSON).status_code == 200
+    page = client.get("/")
+    assert "No access yet" in page.text and "alice@personal.example" in page.text
+    # The row moved to the new address, so the session opened under the old one ended...
+    assert successor.get("/", follow_redirects=False).headers["location"] == "/login"
+    # ...and the old address now gets an account of its own.
+    now[0] += 61  # past the one-code-a-minute limit
+    sign_in(successor, mailer, "alice@company.example")
+    assert "No access yet" not in successor.get("/").text
+    assert "No access yet" in client.get("/").text
