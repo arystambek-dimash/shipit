@@ -1,7 +1,9 @@
 import os
+import sqlite3
 
+from app.auth import sessions
 from app.devsites import resolve_site_file
-from tests.helpers import ADMIN, publish_site, sign_in, upload_zip
+from tests.helpers import ADMIN, new_client, publish_site, sign_in, upload_zip
 
 
 def test_unknown_page_renders_translated_404(client):
@@ -153,6 +155,32 @@ def test_uploads_may_be_larger_than_the_form_cap(client, mailer):
     noise = os.urandom(200_000)  # incompressible, so the zip stays well over 64 KB
     response = upload_zip(client, {"index.html": b"hi", "noise.bin": noise})
     assert response.status_code == 201, response.text
+
+
+def test_error_pages_keep_the_signed_in_header(client, mailer, app):
+    assert 'class="menu"' not in client.get("/nope").text
+    sign_in(client, mailer, ADMIN)
+    for url, status in (("/nope", 404), ("/auth/logout", 405)):
+        response = client.get(url)
+        assert response.status_code == status, url
+        assert 'class="menu"' in response.text and ADMIN in response.text, url
+    with new_client(app) as other:
+        sign_in(other, mailer, "ann@example.com")
+        forbidden = other.get("/admin")
+        assert forbidden.status_code == 403
+        assert 'class="menu"' in forbidden.text and "ann@example.com" in forbidden.text
+
+
+def test_an_error_page_renders_even_if_the_session_lookup_fails(client, mailer, monkeypatch):
+    sign_in(client, mailer, ADMIN)
+
+    def locked(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(sessions, "user_for_token", locked)
+    response = client.get("/nope")
+    assert response.status_code == 404 and "Page not found" in response.text
+    assert 'class="menu"' not in response.text
 
 
 def test_one_polite_live_region_speaks_for_the_page(client, mailer):

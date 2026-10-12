@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -21,8 +22,9 @@ from .deploys.store import SiteStore
 from .deps import Forbidden, NotFound, NotSignedIn
 from .devsites import serve_site_file
 from .routes import admin, auth, internal, pages, sites
-from .web import redirect, render, wants_json
+from .web import redirect, render, settings_of, wants_json
 
+log = logging.getLogger("zerde.app")
 ERROR_KEYS = {403: "error.forbidden", 404: "error.not_found", 405: "error.not_found"}
 # Deployed sites are same-site with the app, so a framed app page would get the session cookie and its
 # forms would pass the Origin check: an evil site could overlay one and steal a click. Never be framed.
@@ -94,7 +96,7 @@ def create_app(settings: Settings | None = None, *, mailer=None, google=None) ->
                 query_lang, request.cookies.get(i18n.LANG_COOKIE), request.headers.get("accept-language")
             )
             if _body_too_big(request):
-                response = _error(request, 413, "error.generic")
+                response = await _error(request, 413, "error.generic")
             else:
                 response = await call_next(request)
             if query_lang in i18n.LANGS:
@@ -114,19 +116,19 @@ def create_app(settings: Settings | None = None, *, mailer=None, google=None) ->
 
     @app.exception_handler(Forbidden)
     async def handle_forbidden(request: Request, exc: Forbidden) -> Response:
-        return _error(request, 403, "error.forbidden")
+        return await _error(request, 403, "error.forbidden")
 
     @app.exception_handler(NotFound)
     async def handle_not_found(request: Request, exc: NotFound) -> Response:
-        return _error(request, 404, "error.not_found")
+        return await _error(request, 404, "error.not_found")
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http(request: Request, exc: StarletteHTTPException) -> Response:
-        return _error(request, exc.status_code, ERROR_KEYS.get(exc.status_code, "error.generic"))
+        return await _error(request, exc.status_code, ERROR_KEYS.get(exc.status_code, "error.generic"))
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation(request: Request, exc: RequestValidationError) -> Response:
-        return _error(request, 400, "error.generic")
+        return await _error(request, 400, "error.generic")
 
     return app
 
@@ -135,9 +137,27 @@ def _lang(request: Request) -> str:
     return getattr(request.state, "lang", i18n.DEFAULT_LANG)
 
 
-def _error(request: Request, status: int, key: str) -> Response:
+def _signed_in_user(request: Request) -> sqlite3.Row | None:
+    """Who is signed in, for the error page's header. Best effort: an error page must never fail itself."""
+    settings = settings_of(request)
+    token = request.cookies.get(settings.session_cookie)
+    if not token:
+        return None
+    try:
+        conn = db.connect(settings.db_path)
+        try:
+            return sessions.user_for_token(conn, token)
+        finally:
+            conn.close()
+    except Exception:
+        log.warning("could not look up the session for an error page", exc_info=True)
+        return None
+
+
+async def _error(request: Request, status: int, key: str) -> Response:
     request.state.lang = _lang(request)
     message = i18n.t(request.state.lang, key)
     if wants_json(request):
         return JSONResponse({"error": message}, status_code=status)
-    return render(request, "error.html", status=status, message=message, code=status)
+    user = await run_in_threadpool(_signed_in_user, request)
+    return render(request, "error.html", status=status, user=user, message=message, code=status)
