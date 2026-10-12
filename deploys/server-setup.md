@@ -43,7 +43,7 @@ DEPLOY_HOST=ubuntu@212.116.232.74 ./deploys/deploy.sh   # first run stops and as
 
 On the server: `cp /opt/zerde-deploy/deploys/.env.example /opt/zerde-deploy/deploys/.env`, then fill in `SECRET_KEY`, `GOOGLE_CLIENT_ID`, `ADMIN_EMAILS` and the `SMTP_*` values. Run `deploy.sh` again.
 
-Check `https://deploy.zerde.ai/healthz` → `ok`. The first visit to a new site's address takes a few seconds while its certificate is issued.
+`deploy.sh` finishes by checking that the app answers `/healthz` and that `https://deploy.zerde.ai/healthz` answers through Caddy, and prints `OK: …`. If either check fails, it exits non-zero and prints the last app or Caddy log lines (an empty `SECRET_KEY` is the usual cause). The first visit to a new site's address takes a few seconds while its certificate is issued.
 
 ## 5. Backups
 

@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2.10
+    image: caddy:2.11
     depends_on:
       - app
     restart: unless-stopped

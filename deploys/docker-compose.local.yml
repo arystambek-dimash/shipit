@@ -13,3 +13,16 @@ services:
       - "8080:80"
     volumes:
       - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+  # Load generator for smoke_local.sh (`docker compose ... run --rm loadtest <oha args>`).
+  # It sits on the compose network and talks to caddy:80 directly, so Docker Desktop's port
+  # forwarder (which resets connections at 1000 connections x ~20k req/s) is not measured.
+  loadtest:
+    image: ghcr.io/hatoo/oha:1.16.0
+    profiles:
+      - loadtest
+    depends_on:
+      - caddy
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
