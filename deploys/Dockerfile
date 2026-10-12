@@ -10,7 +10,9 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev
 COPY backend/app ./app
 COPY frontend /srv/frontend
-RUN useradd --system --uid 10001 --home-dir /srv zerde && mkdir -p /data && chown zerde:zerde /data
+# Docker fills a new, empty sitedata volume from the image's /data, so /data/sites exists before Caddy starts:
+# Caddy mounts only that subfolder (docker-compose.yml), and Docker refuses to mount a missing one.
+RUN useradd --system --uid 10001 --home-dir /srv zerde && mkdir -p /data/sites && chown -R zerde:zerde /data
 USER zerde
 ENV PATH="/srv/venv/bin:$PATH" DATA_DIR=/data
 EXPOSE 8000

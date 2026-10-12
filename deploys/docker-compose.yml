@@ -27,14 +27,23 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
-    env_file:
-      - path: .env
-        required: false
+    # Caddy gets only what its Caddyfile reads, never the app's secrets: these three are interpolated from
+    # deploys/.env. The defaults only keep docker-compose.local.yml (no .env, Caddyfile.local) quiet.
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-}
+      SITES_DOMAIN: ${SITES_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./sites.caddy:/etc/caddy/sites.caddy:ro
       - ../frontend/static/site-404.html:/srv/errors/site-404.html:ro
-      - sitedata:/srv/data:ro
+      # Only the deployed sites, read-only: not app.db, its backups or half-staged uploads (Docker >= 26).
+      - type: volume
+        source: sitedata
+        target: /srv/data/sites
+        read_only: true
+        volume:
+          subpath: sites
       - caddy_data:/data
       - caddy_config:/config
     ulimits:
