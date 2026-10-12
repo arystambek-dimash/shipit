@@ -22,7 +22,7 @@ def test_static_asset_budget():
 def test_dashboard_html_budget(client, mailer):
     sign_in(client, mailer, ADMIN)
     for _ in range(5):
-        upload_zip(client, {"index.html": b"hi"})
+        assert upload_zip(client, {"index.html": b"hi"}).status_code == 201
     response = client.get("/")
     assert gz(response.content) <= 15_000
 
