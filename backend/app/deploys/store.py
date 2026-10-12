@@ -44,12 +44,15 @@ class SiteStore:
                 fd = os.open(path, os.O_RDONLY)
             except FileNotFoundError:  # a starting worker's cleanup removed it before we could lock it
                 continue
-            fcntl.flock(fd, fcntl.LOCK_EX)
             try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
                 if os.path.samestat(os.fstat(fd), os.stat(path)):
                     break
             except FileNotFoundError:
                 pass
+            except BaseException:
+                os.close(fd)
+                raise
             os.close(fd)  # removed while we waited for the lock: draw another one
         try:
             yield path
